@@ -3,17 +3,15 @@ package com.example.hdtrailbuilder
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,69 +21,74 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import java.util.Locale
+
+private sealed interface BermOutcome {
+    data class Success(val distanceM: Float) : BermOutcome
+    data class Problem(val message: String, val isError: Boolean) : BermOutcome
+}
 
 @Composable
 fun BermDistanceScreen(
-    sensorRepository: SensorRepository,
+    liveSensors: LiveSensorState,
     prefillLandingSpeedMs: Float?,
     modifier: Modifier = Modifier
 ) {
-    var landingSpeedKmhText by remember(prefillLandingSpeedMs) {
-        mutableStateOf(prefillLandingSpeedMs?.let { String.format(Locale.US, "%.1f", it * 3.6f) } ?: "")
+    var landingSpeedText by remember(prefillLandingSpeedMs) {
+        mutableStateOf(prefillLandingSpeedMs?.let { formatValue(it * 3.6f) } ?: "")
     }
     var dropToBerm by remember { mutableStateOf<Float?>(null) }
-    var targetSpeedKmhText by remember { mutableStateOf("") }
+    var targetSpeedText by remember { mutableStateOf("") }
     var selectedFriction by remember { mutableStateOf(FrictionPreset.PACKED_TRAIL) }
-    var resultText by remember { mutableStateOf<String?>(null) }
+    var outcome by remember { mutableStateOf<BermOutcome?>(null) }
 
     Column(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text("מרחק עד הברם", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        SectionCard(
+            title = "Entry",
+            subtitle = "How fast you are travelling when you touch down"
+        ) {
+            NumberField(
+                label = "Landing speed",
+                value = landingSpeedText,
+                onValueChange = { landingSpeedText = it },
+                unit = "km/h"
+            )
+            if (prefillLandingSpeedMs != null) {
+                AssistChip(
+                    onClick = {
+                        landingSpeedText = formatValue(prefillLandingSpeedMs * 3.6f)
+                    },
+                    label = { Text("Use ${formatValue(prefillLandingSpeedMs * 3.6f)} km/h from Jump") }
+                )
+            }
+        }
 
-        OutlinedTextField(
-            value = landingSpeedKmhText,
-            onValueChange = { landingSpeedKmhText = it },
-            label = { Text("מהירות בנחיתה (קמ\"ש - מתמלא אוטומטית מחישוב הקפיצה)") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            modifier = Modifier.fillMaxWidth()
-        )
+        SectionCard(
+            title = "Terrain",
+            subtitle = "Elevation change and surface between landing and berm"
+        ) {
+            ElevationDeltaInput(
+                label = "Drop from landing to berm",
+                hint = "A at the landing spot, B at the berm. Negative means the berm is higher.",
+                liveSensors = liveSensors,
+                valueMeters = dropToBerm,
+                onValueChange = { dropToBerm = it }
+            )
 
-        Text(
-            "* אין צורך למדוד שוב - חישוב הקפיצה כבר הזין כאן ערך אם השתמשת בו קודם",
-            fontSize = 12.sp
-        )
-
-        ElevationDeltaInput(
-            label = "הפרש גובה מנקודת הנחיתה עד הברם (שלילי = הברם גבוה יותר)",
-            sensorRepository = sensorRepository,
-            valueMeters = dropToBerm,
-            onValueChange = { dropToBerm = it },
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        OutlinedTextField(
-            value = targetSpeedKmhText,
-            onValueChange = { targetSpeedKmhText = it },
-            label = { Text("מהירות יעד בכניסה לברם (קמ\"ש)") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Column {
-            Text("טיב שטח (מהטוב לגרוע)", fontSize = 14.sp)
+            Text(
+                text = "Surface",
+                style = MaterialTheme.typography.titleSmall
+            )
             FrictionPreset.entries.forEach { preset ->
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier
                         .fillMaxWidth()
                         .selectable(
@@ -93,36 +96,76 @@ fun BermDistanceScreen(
                             onClick = { selectedFriction = preset }
                         )
                 ) {
-                    RadioButton(selected = selectedFriction == preset, onClick = { selectedFriction = preset })
-                    Text(preset.label, fontSize = 14.sp)
+                    RadioButton(
+                        selected = selectedFriction == preset,
+                        onClick = { selectedFriction = preset }
+                    )
+                    Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                        Text(preset.label, style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            text = "${preset.description} · µ ${preset.mu}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }
 
+        SectionCard(
+            title = "Target",
+            subtitle = "Speed you want to be carrying into the berm"
+        ) {
+            NumberField(
+                label = "Berm entry speed",
+                value = targetSpeedText,
+                onValueChange = { targetSpeedText = it },
+                unit = "km/h"
+            )
+        }
+
         Button(
             onClick = {
-                val landingSpeedMs = (landingSpeedKmhText.toFloatOrNull() ?: 0f) / 3.6f
+                val landingSpeedMs = (landingSpeedText.toFloatOrNull() ?: 0f) / 3.6f
+                val targetMs = (targetSpeedText.toFloatOrNull() ?: 0f) / 3.6f
                 val drop = dropToBerm
-                val targetMs = (targetSpeedKmhText.toFloatOrNull() ?: 0f) / 3.6f
 
-                if (drop == null) {
-                    resultText = "צריך למלא/למדוד את הפרש הגובה עד הברם קודם"
-                    return@Button
-                }
-
-                val distance = Physics.bermApproachDistance(landingSpeedMs, drop, targetMs, selectedFriction.mu)
-                resultText = if (distance == null) {
-                    "כבר בקצב מספיק - אין צורך במרחק בלימה נוסף"
-                } else {
-                    String.format(Locale.US, "מרחק דרוש עד הברם: %.1f מ'", distance)
+                outcome = when {
+                    landingSpeedText.toFloatOrNull() == null ->
+                        BermOutcome.Problem("Enter the landing speed, or calculate a jump first.", true)
+                    drop == null ->
+                        BermOutcome.Problem("Measure or type the drop to the berm.", true)
+                    else -> {
+                        val distance = Physics.bermApproachDistance(
+                            landingSpeedMs, drop, targetMs, selectedFriction.mu
+                        )
+                        if (distance == null) {
+                            BermOutcome.Problem(
+                                "You are already at or below the target speed - no run-out needed.",
+                                false
+                            )
+                        } else {
+                            BermOutcome.Success(distance)
+                        }
+                    }
                 }
             },
             modifier = Modifier.fillMaxWidth()
-        ) { Text("חשב מרחק לברם") }
+        ) { Text("Calculate distance") }
 
-        resultText?.let {
-            Spacer(Modifier.height(4.dp))
-            Text(it, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+        when (val current = outcome) {
+            null -> Unit
+            is BermOutcome.Problem -> NoticeCard(current.message, isError = current.isError)
+            is BermOutcome.Success -> ResultCard(
+                primaryLabel = "DISTANCE TO BERM",
+                primaryValue = formatValue(current.distanceM),
+                primaryUnit = "m",
+                secondary = listOf(
+                    "Surface" to selectedFriction.label,
+                    "From" to "${landingSpeedText.ifBlank { "0" }} km/h",
+                    "To" to "${targetSpeedText.ifBlank { "0" }} km/h"
+                )
+            )
         }
     }
 }

@@ -7,17 +7,18 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -26,13 +27,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 
 private enum class Screen(val label: String) {
-    Jump("קפיצה"),
-    Berm("ברם"),
-    TrailRun("בדיקת רמפה")
+    Jump("Jump"),
+    Berm("Berm"),
+    RideLog("Ride Log")
 }
 
 class MainActivity : ComponentActivity() {
@@ -48,8 +48,11 @@ class MainActivity : ComponentActivity() {
         angleRepository = AngleRepository(applicationContext)
 
         setContent {
-            MaterialTheme(colorScheme = darkColorScheme()) {
-                Surface(modifier = Modifier) {
+            HdTrailBuilderTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
                     AppRoot(sensorRepository, locationRepository, angleRepository)
                 }
             }
@@ -57,6 +60,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AppRoot(
     sensorRepository: SensorRepository,
@@ -64,6 +68,7 @@ private fun AppRoot(
     angleRepository: AngleRepository
 ) {
     val context = LocalContext.current
+    val liveSensors = rememberLiveSensors(sensorRepository, angleRepository)
     var currentScreen by remember { mutableStateOf(Screen.Jump) }
     var lastJumpResult by remember { mutableStateOf<JumpScreenResult?>(null) }
 
@@ -85,32 +90,47 @@ private fun AppRoot(
         }
     }
 
-    Column(modifier = Modifier.padding(12.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            Screen.entries.forEach { screen ->
-                if (screen == currentScreen) {
-                    Button(onClick = { currentScreen = screen }) { Text(screen.label) }
-                } else {
-                    OutlinedButton(onClick = { currentScreen = screen }) { Text(screen.label) }
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("HD Trail Builder") },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            )
+        }
+    ) { innerPadding ->
+        Column(modifier = Modifier.padding(innerPadding)) {
+            LiveSensorBar(liveSensors)
+
+            TabRow(selectedTabIndex = currentScreen.ordinal) {
+                Screen.entries.forEach { screen ->
+                    Tab(
+                        selected = screen == currentScreen,
+                        onClick = { currentScreen = screen },
+                        text = { Text(screen.label) }
+                    )
                 }
             }
-        }
 
-        when (currentScreen) {
-            Screen.Jump -> JumpCalculatorScreen(
-                sensorRepository = sensorRepository,
-                angleRepository = angleRepository,
-                onResult = { lastJumpResult = it }
-            )
-            Screen.Berm -> BermDistanceScreen(
-                sensorRepository = sensorRepository,
-                prefillLandingSpeedMs = lastJumpResult?.landingSpeedMs
-            )
-            Screen.TrailRun -> TrailRunScreen(
-                locationRepository = locationRepository,
-                hasLocationPermission = hasLocationPermission,
-                onRequestPermission = { permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION) }
-            )
+            when (currentScreen) {
+                Screen.Jump -> JumpCalculatorScreen(
+                    liveSensors = liveSensors,
+                    onResult = { lastJumpResult = it }
+                )
+                Screen.Berm -> BermDistanceScreen(
+                    liveSensors = liveSensors,
+                    prefillLandingSpeedMs = lastJumpResult?.landingSpeedMs
+                )
+                Screen.RideLog -> TrailRunScreen(
+                    locationRepository = locationRepository,
+                    hasLocationPermission = hasLocationPermission,
+                    onRequestPermission = {
+                        permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                    }
+                )
+            }
         }
     }
 }

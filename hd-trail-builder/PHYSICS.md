@@ -1,83 +1,109 @@
-# הנוסחאות מאחורי HD Trail Builder
+# The math behind HD Trail Builder
 
-מסמך ייחוס לנוסחאות ב-`app/src/main/java/com/example/hdtrailbuilder/Physics.kt`.
-הכל בפיזיקה קלאסית פשוטה (משוואות אנרגיה + זריקה חופשית), **בלי
-התנגדות אוויר**. `g = 9.81`.
+Reference for `app/src/main/java/com/example/hdtrailbuilder/Physics.kt`.
+Classical mechanics only - energy conservation and projectile motion, **with no
+air resistance**. `g = 9.81 m/s²`.
 
-## כיווני הסימון (סימן) של כל Δh
+## Sign conventions for every height difference
 
-כל הפרשי הגובה באפליקציה הם **דלתא בין שתי נקודות מדידה בפועל**
-(ברומטר, "נק' A" ו-"נק' B") - לא גבהים אבסולוטיים מעל פני הים. הסימן
-תמיד: **A פחות B**.
+All height inputs are **deltas between two measured points** (barometer, "point A"
+and "point B") - never absolute sea-level figures. The sign is always **A minus B**.
 
-| שדה | A | B | ערך טיפוסי |
+| Field | Point A | Point B | Typical sign |
 |---|---|---|---|
-| ירידה לשפת הרמפה | נק' התחלה | שפת הרמפה | חיובי (יורד) |
-| ירידת נחיתה | שפת הרמפה | נק' נחיתה | חיובי (נוחת נמוך משפת הרמפה) |
-| הפרש עד הברם | נק' נחיתה | הברם | חיובי = הברם נמוך יותר (ממשיך לרדת); שלילי = הברם גבוה יותר (עלייה) |
+| Drop to the ramp lip | start point | ramp lip | positive (you descend) |
+| Drop from lip to landing | ramp lip | landing spot | positive (landing below the lip) |
+| Drop from landing to berm | landing spot | berm | positive = berm is lower (still descending); negative = berm is higher (climbing) |
 
-## חלק 1 - מרחק קפיצה
+## Barometric altitude and calibration
 
-**שלב א' - מהירות בשפת הרמפה (שימור אנרגיה):**
+Altitude comes from the standard barometric formula:
+
 ```
-v_lip = sqrt(v_start² + 2·g·Δh_to_lip)
+altitude = 44330 · (1 − (p / p₀)^(1/5.255))
 ```
-(האנרגיה הפוטנציאלית שאבדה בירידה הופכת לאנרגיה קינטית).
 
-**שלב ב' - זריקה חופשית משפת הרמפה:**
-עם זווית יציאה θ (זווית הרמפה):
+`p` is the measured pressure and `p₀` the sea-level reference. Out of the box
+`p₀ = 1013.25 hPa` (standard atmosphere), which is why the absolute readout is
+only approximate - real weather moves sea-level pressure by tens of hPa, worth
+50-100 m of apparent altitude.
+
+The app therefore lets you calibrate: tap the altitude in the live bar, enter your
+true altitude, and the reference is back-solved from the inverse of the same
+formula:
+
+```
+p₀ = p / (1 − h/44330)^5.255
+```
+
+**A height difference between two points is unaffected by calibration** - the same
+reference cancels out of both terms. Calibration only makes the absolute number
+meaningful.
+
+## Part 1 - jump distance
+
+**Step A - speed at the ramp lip (energy conservation):**
+```
+v_lip = √(v_start² + 2·g·Δh_to_lip)
+```
+The potential energy lost on the way down becomes kinetic energy.
+
+**Step B - projectile motion off the lip**, with launch angle θ (the ramp angle):
 ```
 vx  = v_lip · cos(θ)
 vy0 = v_lip · sin(θ)
 ```
-המשוואה לגובה ביחס לשפת הרמפה: `y(t) = vy0·t − 0.5·g·t²`.
-נוחתים כש-`y(t) = −landingDrop`, כלומר פותרים:
+Height relative to the lip is `y(t) = vy0·t − 0.5·g·t²`. You land when
+`y(t) = −landingDrop`, so solve:
 ```
 0.5·g·t² − vy0·t − landingDrop = 0
-t = [vy0 + sqrt(vy0² + 2·g·landingDrop)] / g   (השורש החיובי הפיזיקלי)
+t = [vy0 + √(vy0² + 2·g·landingDrop)] / g     (the physical positive root)
 ```
-**מרחק הקפיצה** = `vx · t`.
-**מהירות נחיתה** = `sqrt(vx² + vy_land²)` כאשר `vy_land = vy0 − g·t`.
+**Jump distance** = `vx · t`.
+**Landing speed** = `√(vx² + vy_land²)` where `vy_land = vy0 − g·t`.
 
-אם `landingDrop < 0` (המשמעות: הנחיתה גבוהה משפת הרמפה) - זה מצב לא
-הגיוני לקפיצה רגילה, האפליקציה לא מחשבת ומציגה הודעה.
+If `landingDrop < 0` (the landing sits above the lip) the app refuses to compute
+and says so - that is not a normal jump geometry.
 
-## חלק 2 - מרחק עד הברם
+## Part 2 - distance to the berm
 
-משוואת אנרגיה בין נקודת הנחיתה לנקודת כניסת הברם, עם אובדן אנרגיה
-לחיכוך/התנגדות גלגול לאורך מרחק `d`:
+Energy balance between the landing point and the berm entry, with energy lost to
+friction and rolling resistance over distance `d`:
 ```
-0.5·v_land² + g·Δh_to_berm = 0.5·v_target² + μ·g·d
+0.5·v_land² + g·Δh_to_berm = 0.5·v_target² + µ·g·d
 ```
-כאשר `μ` הוא מקדם חיכוך/התנגדות אפקטיבי (ראו טבלת פריסטים למטה),
-ופותרים עבור `d`:
+Solved for `d`:
 ```
-d = [0.5·v_land² + g·Δh_to_berm − 0.5·v_target²] / (μ·g)
+d = [0.5·v_land² + g·Δh_to_berm − 0.5·v_target²] / (µ·g)
 ```
-אם המונה `≤ 0` - כבר נמצאים במהירות יעד או פחות בלי צורך במרחק בלימה
-כלל, ומוצגת הודעה במקום מספר שלילי חסר משמעות.
+If the numerator is `≤ 0` you are already at or below the target speed with no
+run-out at all, and the app says that instead of printing a meaningless negative
+number.
 
-**פריסטים ל-μ (קירוב לתכנון, לא מדידה פיזית מדויקת - "כמה קשה
-להאט/לעצור בשטח הזה"):**
+**Surface presets for µ** (planning approximations - "how hard is it to slow down
+on this stuff", not a measured coefficient):
 
-| שטח | μ |
+| Surface | µ |
 |---|---|
-| אספלט / מסלול מהודק | 0.03 |
-| שטח חבוט/כבוש (trail רגיל) | 0.06 |
-| אדמה רגילה, קצת רופפת | 0.10 |
-| חול/חצץ רופף | 0.18 |
-| דרדרת / אבנים משוחררות | 0.30 |
+| Paved / hardpack | 0.03 |
+| Packed trail | 0.06 |
+| Loose dirt | 0.10 |
+| Sand or gravel | 0.18 |
+| Loose scree | 0.30 |
 
-## חלק 3 - בדיקת רמפה (GPS בלבד)
+## Part 3 - ride log (GPS only)
 
-עצמאי לגמרי, לא נוגע בנוסחאות למעלה. מהירות וגובה נמדדים ישירות
-מ-GPS (`Location.getSpeed()`, `Location.getAltitude()`) לאורך זמן,
-ומוצגים כגרף - אין כאן חישוב פיזיקלי, רק ויזואליזציה של מדידות גולמיות.
+Completely independent of the formulas above. Speed and altitude are read straight
+from GPS (`Location.getSpeed()`, `Location.getAltitude()`) over time and plotted.
+No physics, just a visualisation of raw measurements. Note that GPS altitude is
+height above the WGS84 ellipsoid and is far less precise than the barometer - the
+barometer is what the measurement widgets use.
 
-## מגבלות ידועות
-- אין התנגדות אוויר בחישוב הקפיצה - במהירויות גבוהות/מרחקים ארוכים
-  התוצאה תהיה אופטימית מהמציאות.
-- `μ` בחלק 2 הוא הערכה גסה, לא מדידה - להתייחס כאל הכוונה ולא כמספר מדויק.
-- מדידת גובה בברומטר רגישה לשינויי לחץ אטמוספרי בין רגע המדידה לרגע
-  השני (למשל אם עברו כמה שעות/מזג אוויר השתנה) - כדאי למדוד את שתי
-  הנקודות (A ו-B) בסמיכות זמן.
+## Known limitations
+
+- No air resistance in the jump calculation. At higher speeds and longer distances
+  the predicted distance will be optimistic compared to reality.
+- `µ` in part 2 is a rough estimate, not a measurement. Treat the output as
+  guidance, not a precise number.
+- Barometric measurement is sensitive to weather changes between the two captures -
+  take point A and point B close together in time.

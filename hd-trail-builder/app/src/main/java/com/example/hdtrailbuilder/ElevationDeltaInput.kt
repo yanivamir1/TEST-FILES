@@ -4,87 +4,140 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Button
+import androidx.compose.material3.Divider
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
-import java.util.Locale
 
 /**
- * Height-delta input: tap "mark point A" at the top of the measurement, "mark point B" at the
- * bottom - each captures one barometer pressure reading. The field then fills in automatically
- * with altitude(A) - altitude(B), still editable by hand afterwards.
+ * Height-difference input driven by the live barometer readout.
+ *
+ * The current altitude is shown continuously, so the rider can watch it settle before
+ * capturing. Point A is the upper spot, point B the lower one; each capture stores that
+ * altitude and the difference (A - B) fills the field, which stays hand-editable.
  */
 @Composable
 fun ElevationDeltaInput(
     label: String,
-    sensorRepository: SensorRepository,
+    liveSensors: LiveSensorState,
     valueMeters: Float?,
     onValueChange: (Float?) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    hint: String? = null
 ) {
-    val scope = rememberCoroutineScope()
-    var pointAhPa by remember { mutableStateOf<Float?>(null) }
-    var pointBhPa by remember { mutableStateOf<Float?>(null) }
-    var status by remember { mutableStateOf<String?>(null) }
-    var textValue by remember { mutableStateOf(valueMeters?.let { String.format(Locale.US, "%.1f", it) } ?: "") }
+    var pointA by remember { mutableStateOf<Float?>(null) }
+    var pointB by remember { mutableStateOf<Float?>(null) }
+    var textValue by remember { mutableStateOf(valueMeters?.let { formatValue(it) } ?: "") }
 
-    fun captureInto(onCaptured: (Float) -> Unit) {
-        scope.launch {
-            when (val reading = sensorRepository.pressureFlow().first()) {
-                is PressureReading.Value -> onCaptured(reading.hPa)
-                is PressureReading.Unavailable -> status = "אין חיישן ברומטר במכשיר זה"
-            }
-        }
-    }
-
-    fun recomputeDelta() {
-        val a = pointAhPa
-        val b = pointBhPa
+    fun applyDelta() {
+        val a = pointA
+        val b = pointB
         if (a != null && b != null) {
-            val delta = sensorRepository.altitudeMeters(a) - sensorRepository.altitudeMeters(b)
-            textValue = String.format(Locale.US, "%.1f", delta)
+            val delta = a - b
+            textValue = formatValue(delta)
             onValueChange(delta)
-            status = "חושב מהברומטר"
         }
     }
 
-    Column(modifier = modifier) {
-        Text(label, fontSize = 14.sp)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = {
-                captureInto { hPa -> pointAhPa = hPa; recomputeDelta() }
-            }) { Text(if (pointAhPa != null) "נק' A ✓" else "סמן נק' A") }
-
-            OutlinedButton(onClick = {
-                captureInto { hPa -> pointBhPa = hPa; recomputeDelta() }
-            }) { Text(if (pointBhPa != null) "נק' B ✓" else "סמן נק' B") }
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold
+        )
+        hint?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
 
-        OutlinedTextField(
+        ReadoutTile(
+            label = "LIVE ALTITUDE",
+            value = liveSensors.altitudeM?.let { formatValue(it) } ?: "—",
+            unit = "m"
+        )
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            CapturePointButton(
+                name = "A",
+                subtitle = "top",
+                captured = pointA,
+                enabled = liveSensors.altitudeM != null,
+                onCapture = { pointA = liveSensors.altitudeM; applyDelta() },
+                modifier = Modifier.weight(1f)
+            )
+            CapturePointButton(
+                name = "B",
+                subtitle = "bottom",
+                captured = pointB,
+                enabled = liveSensors.altitudeM != null,
+                onCapture = { pointB = liveSensors.altitudeM; applyDelta() },
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        if (pointA != null || pointB != null) {
+            TextButton(
+                onClick = {
+                    pointA = null
+                    pointB = null
+                }
+            ) { Text("Clear captured points") }
+        }
+
+        Divider()
+
+        NumberField(
+            label = "Height difference",
             value = textValue,
             onValueChange = {
                 textValue = it
                 onValueChange(it.toFloatOrNull())
             },
-            label = { Text("הפרש גובה במטרים") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            modifier = Modifier.fillMaxWidth()
+            unit = "m",
+            supportingText = "Captured from A − B, or type it in directly"
         )
+    }
+}
 
-        status?.let { Text(it, fontSize = 12.sp, color = Color.Gray) }
+@Composable
+private fun CapturePointButton(
+    name: String,
+    subtitle: String,
+    captured: Float?,
+    enabled: Boolean,
+    onCapture: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val content: @Composable () -> Unit = {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = if (captured != null) "${formatValue(captured)} m" else "Set point $name",
+                style = MaterialTheme.typography.labelLarge
+            )
+            Text(
+                text = if (captured != null) "point $name · $subtitle" else subtitle,
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
+    }
+
+    if (captured != null) {
+        Button(onClick = onCapture, enabled = enabled, modifier = modifier) { content() }
+    } else {
+        OutlinedButton(onClick = onCapture, enabled = enabled, modifier = modifier) { content() }
     }
 }
