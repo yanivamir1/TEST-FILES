@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -34,7 +35,10 @@ fun JumpCalculatorScreen(
     var dropToLip by remember { mutableStateOf<Float?>(null) }
     var rampAngleDeg by remember { mutableStateOf<Float?>(null) }
     var landingDrop by remember { mutableStateOf<Float?>(null) }
+    var activeStep by remember { mutableStateOf(TrailStep.RollIn) }
     var outcome by remember { mutableStateOf<JumpOutcome?>(null) }
+
+    val jumpDistance = (outcome as? JumpOutcome.Success)?.result?.distanceM
 
     Column(
         modifier = modifier
@@ -43,9 +47,19 @@ fun JumpCalculatorScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        StepDiagramCard(
+            activeStep = activeStep,
+            dropToLipM = dropToLip,
+            rampAngleDeg = rampAngleDeg,
+            landingDropM = landingDrop,
+            jumpDistanceM = jumpDistance
+        )
+
         SectionCard(
             title = "Approach",
-            subtitle = "Speed built up on the way into the ramp"
+            subtitle = "Speed built up on the way into the ramp",
+            active = activeStep == TrailStep.RollIn,
+            onActivate = { activeStep = TrailStep.RollIn }
         ) {
             NumberField(
                 label = "Starting speed",
@@ -55,37 +69,44 @@ fun JumpCalculatorScreen(
                 supportingText = "Leave at 0 if you roll in from a standstill"
             )
             ElevationDeltaInput(
-                label = "Drop to the ramp lip",
-                hint = "Stand at your start point for A, at the lip for B",
+                label = TrailStep.RollIn.title,
+                hint = TrailStep.RollIn.instruction,
                 liveSensors = liveSensors,
                 valueMeters = dropToLip,
-                onValueChange = { dropToLip = it }
+                onValueChange = { dropToLip = it },
+                onInteract = { activeStep = TrailStep.RollIn }
             )
         }
 
         SectionCard(
             title = "Takeoff",
-            subtitle = "Launch angle of the ramp face"
+            subtitle = "Launch angle of the ramp face",
+            active = activeStep == TrailStep.Ramp,
+            onActivate = { activeStep = TrailStep.Ramp }
         ) {
             AngleMeasureInput(
-                label = "Ramp angle",
-                hint = "Rest the phone flat on the ramp face and watch the live angle",
+                label = TrailStep.Ramp.title,
+                hint = TrailStep.Ramp.instruction,
                 liveSensors = liveSensors,
                 valueDeg = rampAngleDeg,
-                onValueChange = { rampAngleDeg = it }
+                onValueChange = { rampAngleDeg = it },
+                onInteract = { activeStep = TrailStep.Ramp }
             )
         }
 
         SectionCard(
             title = "Landing",
-            subtitle = "How far below the lip you touch down"
+            subtitle = "How far below the lip you touch down",
+            active = activeStep == TrailStep.Landing,
+            onActivate = { activeStep = TrailStep.Landing }
         ) {
             ElevationDeltaInput(
-                label = "Drop from lip to landing",
-                hint = "A at the lip, B at the landing spot",
+                label = TrailStep.Landing.title,
+                hint = TrailStep.Landing.instruction,
                 liveSensors = liveSensors,
                 valueMeters = landingDrop,
-                onValueChange = { landingDrop = it }
+                onValueChange = { landingDrop = it },
+                onInteract = { activeStep = TrailStep.Landing }
             )
         }
 
@@ -131,5 +152,32 @@ fun JumpCalculatorScreen(
                 )
             )
         }
+    }
+}
+
+@Composable
+private fun StepDiagramCard(
+    activeStep: TrailStep,
+    dropToLipM: Float?,
+    rampAngleDeg: Float?,
+    landingDropM: Float?,
+    jumpDistanceM: Float?
+) {
+    DiagramCard(
+        eyebrow = "MEASURING NOW",
+        step = activeStep.stepLabel,
+        title = activeStep.title,
+        instruction = activeStep.instruction
+    ) {
+        TrailProfile(
+            activeStep = activeStep,
+            dropToLipM = dropToLipM,
+            rampAngleDeg = rampAngleDeg,
+            landingDropM = landingDropM,
+            jumpDistanceM = jumpDistanceM,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(160.dp)
+        )
     }
 }

@@ -34,7 +34,8 @@ fun ElevationDeltaInput(
     valueMeters: Float?,
     onValueChange: (Float?) -> Unit,
     modifier: Modifier = Modifier,
-    hint: String? = null
+    hint: String? = null,
+    onInteract: () -> Unit = {}
 ) {
     var pointA by remember { mutableStateOf<Float?>(null) }
     var pointB by remember { mutableStateOf<Float?>(null) }
@@ -76,7 +77,7 @@ fun ElevationDeltaInput(
                 subtitle = "top",
                 captured = pointA,
                 enabled = liveSensors.altitudeM != null,
-                onCapture = { pointA = liveSensors.altitudeM; applyDelta() },
+                onCapture = { onInteract(); pointA = liveSensors.altitudeM; applyDelta() },
                 modifier = Modifier.weight(1f)
             )
             CapturePointButton(
@@ -84,7 +85,7 @@ fun ElevationDeltaInput(
                 subtitle = "bottom",
                 captured = pointB,
                 enabled = liveSensors.altitudeM != null,
-                onCapture = { pointB = liveSensors.altitudeM; applyDelta() },
+                onCapture = { onInteract(); pointB = liveSensors.altitudeM; applyDelta() },
                 modifier = Modifier.weight(1f)
             )
         }
@@ -104,6 +105,7 @@ fun ElevationDeltaInput(
             label = "Height difference",
             value = textValue,
             onValueChange = {
+                onInteract()
                 textValue = it
                 onValueChange(it.toFloatOrNull())
             },

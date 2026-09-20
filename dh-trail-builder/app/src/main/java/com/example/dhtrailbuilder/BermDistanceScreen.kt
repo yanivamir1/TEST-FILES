@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
@@ -47,6 +48,21 @@ fun BermDistanceScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        DiagramCard(
+            eyebrow = "MEASURING NOW",
+            step = TrailStep.RunOut.stepLabel,
+            title = TrailStep.RunOut.title,
+            instruction = TrailStep.RunOut.instruction
+        ) {
+            TrailProfile(
+                activeStep = TrailStep.RunOut,
+                gradientDeg = gradientDeg,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(160.dp)
+            )
+        }
+
         SectionCard(
             title = "Entry",
             subtitle = "How fast you are travelling when you touch down"

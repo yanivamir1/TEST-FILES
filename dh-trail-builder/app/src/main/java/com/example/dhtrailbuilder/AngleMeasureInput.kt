@@ -36,7 +36,8 @@ fun AngleMeasureInput(
     valueDeg: Float?,
     onValueChange: (Float?) -> Unit,
     modifier: Modifier = Modifier,
-    hint: String? = null
+    hint: String? = null,
+    onInteract: () -> Unit = {}
 ) {
     var textValue by remember { mutableStateOf(valueDeg?.let { formatValue(it) } ?: "") }
     val liveAngle = liveSensors.pitchDeg?.let { abs(it) }
@@ -76,6 +77,7 @@ fun AngleMeasureInput(
 
         Button(
             onClick = {
+                onInteract()
                 liveAngle?.let {
                     textValue = formatValue(it)
                     onValueChange(it)
@@ -89,6 +91,7 @@ fun AngleMeasureInput(
             label = "Ramp angle",
             value = textValue,
             onValueChange = {
+                onInteract()
                 textValue = it
                 onValueChange(it.toFloatOrNull())
             },
