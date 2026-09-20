@@ -54,8 +54,9 @@ class SensorRepository(context: Context) {
     }
 
     // גובה משוער במטרים מעל פני הים, מחושב מהלחץ הנוכחי
+    // (getAltitude היא מתודה static ב-SensorManager - קוראים לה דרך המחלקה, לא דרך instance)
     fun altitudeMeters(hPa: Float): Float =
-        sensorManager.getAltitude(SensorManager.PRESSURE_STANDARD_ATMOSPHERE, hPa)
+        SensorManager.getAltitude(SensorManager.PRESSURE_STANDARD_ATMOSPHERE, hPa)
 }
 ```
 **מגבלה ידועה:** לא כל מכשיר Android כולל חיישן לחץ (`TYPE_PRESSURE`)

@@ -40,5 +40,5 @@ class SensorRepository(context: Context) {
 
     /** Approximate altitude in meters above sea level from a barometric pressure reading (hPa). */
     fun altitudeMeters(hPa: Float): Float =
-        sensorManager.getAltitude(SensorManager.PRESSURE_STANDARD_ATMOSPHERE, hPa)
+        SensorManager.getAltitude(SensorManager.PRESSURE_STANDARD_ATMOSPHERE, hPa)
 }
