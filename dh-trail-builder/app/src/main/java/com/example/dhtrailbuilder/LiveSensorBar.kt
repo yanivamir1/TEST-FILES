@@ -3,12 +3,10 @@ package com.example.dhtrailbuilder
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -20,13 +18,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlin.math.abs
 
 /**
- * Always-visible strip of live sensor values, so the rider can watch altitude and
- * phone angle settle before capturing anything.
+ * One thin line of live sensor values, always on screen: altitude above sea level and the
+ * phone's tilt along its length. Tapping the altitude opens calibration.
  */
 @Composable
 fun LiveSensorBar(
@@ -39,44 +37,27 @@ fun LiveSensorBar(
         modifier = modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(20.dp),
+            .clickable(enabled = liveSensors.barometerAvailable) { showCalibration = true }
+            .padding(horizontal = 14.dp, vertical = 5.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(
-            modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .clickable(enabled = liveSensors.barometerAvailable) { showCalibration = true }
-                .padding(horizontal = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "ALTITUDE",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                CalibrationBadge(liveSensors)
-            }
-            Text(
-                text = liveAltitudeText(liveSensors),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
-
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(
-                text = "TILT",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = liveTiltText(liveSensors),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
+        Text(
+            text = altitudeText(liveSensors),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold
+        )
+        Text(
+            text = if (liveSensors.isCalibrated) "CALIBRATED" else "APPROX",
+            style = MaterialTheme.typography.labelSmall,
+            color = if (liveSensors.isCalibrated) MaterialTheme.colorScheme.secondary
+            else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = tiltText(liveSensors),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold
+        )
     }
 
     if (showCalibration) {
@@ -87,38 +68,16 @@ fun LiveSensorBar(
     }
 }
 
-private fun liveAltitudeText(liveSensors: LiveSensorState): String = when {
+private fun altitudeText(liveSensors: LiveSensorState): String = when {
     !liveSensors.barometerAvailable -> "no barometer"
-    liveSensors.altitudeM == null -> "—"
+    liveSensors.altitudeM == null -> "— m"
     else -> "${formatValue(liveSensors.altitudeM!!)} m"
 }
 
-private fun liveTiltText(liveSensors: LiveSensorState): String = when {
-    !liveSensors.accelerometerAvailable -> "no sensor"
-    liveSensors.lengthTiltDeg == null -> "—"
-    else -> "${formatValue(kotlin.math.abs(liveSensors.lengthTiltDeg!!))}°"
-}
-
-@Composable
-private fun CalibrationBadge(liveSensors: LiveSensorState) {
-    if (!liveSensors.barometerAvailable) return
-    val calibrated = liveSensors.isCalibrated
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(4.dp))
-            .background(
-                if (calibrated) MaterialTheme.colorScheme.secondary
-                else MaterialTheme.colorScheme.outline
-            )
-            .padding(horizontal = 5.dp, vertical = 1.dp)
-    ) {
-        Text(
-            text = if (calibrated) "CALIBRATED" else "APPROX",
-            style = MaterialTheme.typography.labelSmall,
-            color = if (calibrated) MaterialTheme.colorScheme.onSecondary
-            else MaterialTheme.colorScheme.surface
-        )
-    }
+private fun tiltText(liveSensors: LiveSensorState): String = when {
+    !liveSensors.accelerometerAvailable -> "no tilt sensor"
+    liveSensors.lengthTiltDeg == null -> "—°"
+    else -> "${formatValue(abs(liveSensors.lengthTiltDeg!!))}°"
 }
 
 @Composable

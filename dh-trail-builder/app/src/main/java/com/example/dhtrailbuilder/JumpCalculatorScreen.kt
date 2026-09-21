@@ -36,6 +36,7 @@ fun JumpCalculatorScreen(
     var dropToLip by remember { mutableStateOf<Float?>(null) }
     var rampAngleDeg by remember { mutableStateOf<Float?>(null) }
     var landingDrop by remember { mutableStateOf<Float?>(null) }
+    var lipAltitudeM by remember { mutableStateOf<Float?>(null) }
     var activeStep by remember { mutableStateOf(TrailStep.RollIn) }
     var outcome by remember { mutableStateOf<JumpOutcome?>(null) }
 
@@ -43,11 +44,8 @@ fun JumpCalculatorScreen(
 
     Column(modifier = modifier.fillMaxSize()) {
         DiagramCard(
-            eyebrow = "MEASURING NOW",
-            step = activeStep.stepLabel,
-            title = activeStep.title,
             instruction = activeStep.instruction,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
         ) {
             TrailProfile(
                 activeStep = activeStep,
@@ -57,7 +55,7 @@ fun JumpCalculatorScreen(
                 jumpDistanceM = landed?.distanceM,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(150.dp)
+                    .height(112.dp)
             )
         }
 
@@ -65,12 +63,11 @@ fun JumpCalculatorScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(start = 12.dp, end = 12.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             SectionCard(
                 title = "Approach",
-                subtitle = "Speed built up on the way into the ramp",
                 active = activeStep == TrailStep.RollIn,
                 onActivate = { activeStep = TrailStep.RollIn }
             ) {
@@ -89,13 +86,13 @@ fun JumpCalculatorScreen(
                     onValueChange = { dropToLip = it },
                     onInteract = { activeStep = TrailStep.RollIn },
                     pointALabel = "start",
-                    pointBLabel = "lip"
+                    pointBLabel = "lip",
+                    onPointBCaptured = { lipAltitudeM = it }
                 )
             }
 
             SectionCard(
                 title = "Takeoff",
-                subtitle = "Launch angle of the ramp face",
                 active = activeStep == TrailStep.Ramp,
                 onActivate = { activeStep = TrailStep.Ramp }
             ) {
@@ -111,18 +108,23 @@ fun JumpCalculatorScreen(
 
             SectionCard(
                 title = "Landing",
-                subtitle = "Where you touch down, below the lip or above it on a step-up",
                 active = activeStep == TrailStep.Landing,
                 onActivate = { activeStep = TrailStep.Landing }
             ) {
                 ElevationDeltaInput(
                     label = TrailStep.Landing.title,
-                    hint = "A back at the lip, B where you touch down. A negative value is a " +
-                        "step-up: the landing sits above the lip.",
+                    hint = if (lipAltitudeM != null) {
+                        "The lip is already set from the first measurement - just capture where " +
+                            "you touch down. A negative value is a step-up."
+                    } else {
+                        "A at the lip, B where you touch down. A negative value is a step-up."
+                    },
                     liveSensors = liveSensors,
                     valueMeters = landingDrop,
                     onValueChange = { landingDrop = it },
                     onInteract = { activeStep = TrailStep.Landing },
+                    presetPointA = lipAltitudeM,
+                    presetPointACaption = "lip, set",
                     pointALabel = "lip",
                     pointBLabel = "landing",
                     onPointBCaptured = onLandingAltitudeCaptured
@@ -172,8 +174,7 @@ fun JumpCalculatorScreen(
                         secondary = listOf(
                             "Lip speed" to "${formatValue(result.lipSpeedMs * 3.6f)} km/h",
                             "Landing speed" to "${formatValue(result.landingSpeedMs * 3.6f)} km/h",
-                            "Air time" to "${formatValue(result.airTimeSec, 2)} s",
-                            "Peak above lip" to "${formatValue(result.peakAboveLipM)} m"
+                            "Air time" to "${formatValue(result.airTimeSec, 2)} s"
                         )
                     )
                 }

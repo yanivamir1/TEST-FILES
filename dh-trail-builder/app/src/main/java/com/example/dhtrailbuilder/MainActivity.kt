@@ -9,16 +9,12 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -60,7 +56,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AppRoot(
     sensorRepository: SensorRepository,
@@ -91,51 +86,39 @@ private fun AppRoot(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("DH Trail Builder") },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+    Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
+        LiveSensorBar(liveSensors)
+
+        TabRow(selectedTabIndex = currentScreen.ordinal) {
+            Screen.entries.forEach { screen ->
+                Tab(
+                    selected = screen == currentScreen,
+                    onClick = { currentScreen = screen },
+                    text = { Text(screen.label, style = MaterialTheme.typography.labelLarge) }
                 )
-            )
+            }
         }
-    ) { innerPadding ->
-        Column(modifier = Modifier.padding(innerPadding)) {
-            LiveSensorBar(liveSensors)
 
-            TabRow(selectedTabIndex = currentScreen.ordinal) {
-                Screen.entries.forEach { screen ->
-                    Tab(
-                        selected = screen == currentScreen,
-                        onClick = { currentScreen = screen },
-                        text = { Text(screen.label) }
-                    )
-                }
-            }
-
-            when (currentScreen) {
-                Screen.Jump -> JumpCalculatorScreen(
-                    liveSensors = liveSensors,
-                    onResult = { lastJumpResult = it },
-                    onLandingAltitudeCaptured = { landingAltitudeM = it }
-                )
-                Screen.Berm -> BermDistanceScreen(
-                    liveSensors = liveSensors,
-                    prefillLandingSpeedMs = lastJumpResult?.landingSpeedMs,
-                    landingAltitudeM = landingAltitudeM
-                )
-                Screen.RideLog -> TrailRunScreen(
-                    sensorRepository = sensorRepository,
-                    locationRepository = locationRepository,
-                    hasLocationPermission = hasLocationPermission,
-                    onRequestPermission = {
-                        permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-                    },
-                    predictedJump = lastJumpResult
-                )
-            }
+        when (currentScreen) {
+            Screen.Jump -> JumpCalculatorScreen(
+                liveSensors = liveSensors,
+                onResult = { lastJumpResult = it },
+                onLandingAltitudeCaptured = { landingAltitudeM = it }
+            )
+            Screen.Berm -> BermDistanceScreen(
+                liveSensors = liveSensors,
+                prefillLandingSpeedMs = lastJumpResult?.landingSpeedMs,
+                landingAltitudeM = landingAltitudeM
+            )
+            Screen.RideLog -> TrailRunScreen(
+                sensorRepository = sensorRepository,
+                locationRepository = locationRepository,
+                hasLocationPermission = hasLocationPermission,
+                onRequestPermission = {
+                    permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                },
+                predictedJump = lastJumpResult
+            )
         }
     }
 }

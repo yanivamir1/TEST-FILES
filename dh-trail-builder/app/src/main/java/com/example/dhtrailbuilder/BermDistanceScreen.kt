@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -44,18 +43,15 @@ fun BermDistanceScreen(
 
     Column(modifier = modifier.fillMaxSize()) {
         DiagramCard(
-            eyebrow = "MEASURING NOW",
-            step = TrailStep.RunOut.stepLabel,
-            title = TrailStep.RunOut.title,
-            instruction = TrailStep.RunOut.instruction,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+            instruction = "Capture at the landing, then at the berm - how much further you drop",
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
         ) {
-            TrailProfile(
-                activeStep = TrailStep.RunOut,
+            BermProfile(
                 dropToBermM = dropToBerm,
+                runOutM = (outcome as? Physics.BermResult.Distance)?.alongGroundM,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(150.dp)
+                    .height(112.dp)
             )
         }
 
@@ -63,8 +59,8 @@ fun BermDistanceScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(start = 12.dp, end = 12.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             SectionCard(
                 title = "Entry",
@@ -74,14 +70,13 @@ fun BermDistanceScreen(
                     label = "Landing speed",
                     value = landingSpeedText,
                     onValueChange = { landingSpeedText = it },
-                    unit = "km/h"
+                    unit = "km/h",
+                    supportingText = if (prefillLandingSpeedMs != null) {
+                        "Filled in from your calculated jump - change it if you want"
+                    } else {
+                        null
+                    }
                 )
-                if (prefillLandingSpeedMs != null) {
-                    AssistChip(
-                        onClick = { landingSpeedText = formatValue(prefillLandingSpeedMs * 3.6f) },
-                        label = { Text("Use ${formatValue(prefillLandingSpeedMs * 3.6f)} km/h from Jump") }
-                    )
-                }
                 NumberField(
                     label = "Target berm entry speed",
                     value = targetSpeedText,

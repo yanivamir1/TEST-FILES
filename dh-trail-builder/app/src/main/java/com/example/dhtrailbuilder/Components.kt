@@ -73,12 +73,12 @@ fun SectionCard(
     }
 }
 
-/** The pinned diagram at the top of a screen: what is being measured right now. */
+/**
+ * The pinned diagram at the top of a screen. Deliberately minimal chrome - the diagram plus
+ * one line saying what to capture - so the scrolling inputs below get the screen.
+ */
 @Composable
 fun DiagramCard(
-    eyebrow: String,
-    step: String,
-    title: String,
     instruction: String,
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit
@@ -88,34 +88,13 @@ fun DiagramCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = eyebrow,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = step,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
             content()
             Text(
                 text = instruction,
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
