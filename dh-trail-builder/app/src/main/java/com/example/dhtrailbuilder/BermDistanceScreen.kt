@@ -29,176 +29,195 @@ import androidx.compose.ui.unit.dp
 fun BermDistanceScreen(
     liveSensors: LiveSensorState,
     prefillLandingSpeedMs: Float?,
+    landingAltitudeM: Float?,
     modifier: Modifier = Modifier
 ) {
     var landingSpeedText by remember(prefillLandingSpeedMs) {
         mutableStateOf(prefillLandingSpeedMs?.let { formatValue(it * 3.6f) } ?: "")
     }
-    var gradientDeg by remember { mutableStateOf<Float?>(0f) }
+    var dropToBerm by remember { mutableStateOf<Float?>(null) }
     var targetSpeedText by remember { mutableStateOf("") }
     var selectedFriction by remember { mutableStateOf(FrictionPreset.PACKED_TRAIL) }
     var braking by remember { mutableStateOf(true) }
     var outcome by remember { mutableStateOf<Physics.BermResult?>(null) }
     var inputProblem by remember { mutableStateOf<String?>(null) }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
+    Column(modifier = modifier.fillMaxSize()) {
         DiagramCard(
             eyebrow = "MEASURING NOW",
             step = TrailStep.RunOut.stepLabel,
             title = TrailStep.RunOut.title,
-            instruction = TrailStep.RunOut.instruction
+            instruction = TrailStep.RunOut.instruction,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
             TrailProfile(
                 activeStep = TrailStep.RunOut,
-                gradientDeg = gradientDeg,
+                dropToBermM = dropToBerm,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(160.dp)
+                    .height(150.dp)
             )
         }
 
-        SectionCard(
-            title = "Entry",
-            subtitle = "How fast you are travelling when you touch down"
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            NumberField(
-                label = "Landing speed",
-                value = landingSpeedText,
-                onValueChange = { landingSpeedText = it },
-                unit = "km/h"
-            )
-            if (prefillLandingSpeedMs != null) {
-                AssistChip(
-                    onClick = { landingSpeedText = formatValue(prefillLandingSpeedMs * 3.6f) },
-                    label = { Text("Use ${formatValue(prefillLandingSpeedMs * 3.6f)} km/h from Jump") }
+            SectionCard(
+                title = "Entry",
+                subtitle = "How fast you are travelling when you touch down"
+            ) {
+                NumberField(
+                    label = "Landing speed",
+                    value = landingSpeedText,
+                    onValueChange = { landingSpeedText = it },
+                    unit = "km/h"
                 )
-            }
-            NumberField(
-                label = "Target berm entry speed",
-                value = targetSpeedText,
-                onValueChange = { targetSpeedText = it },
-                unit = "km/h",
-                supportingText = "The speed you want to be carrying into the turn"
-            )
-        }
-
-        SectionCard(
-            title = "Run-out",
-            subtitle = "The ground between the landing and the berm"
-        ) {
-            AngleMeasureInput(
-                label = "Run-out gradient",
-                hint = "Lay the phone on the ground between landing and berm. " +
-                    "0° is flat; steeper means you keep gaining speed.",
-                liveSensors = liveSensors,
-                valueDeg = gradientDeg,
-                onValueChange = { gradientDeg = it }
-            )
-
-            Text(text = "Riding style", style = MaterialTheme.typography.titleSmall)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(
-                    selected = braking,
-                    onClick = { braking = true },
-                    label = { Text("On the brakes") }
-                )
-                FilterChip(
-                    selected = !braking,
-                    onClick = { braking = false },
-                    label = { Text("Coasting") }
+                if (prefillLandingSpeedMs != null) {
+                    AssistChip(
+                        onClick = { landingSpeedText = formatValue(prefillLandingSpeedMs * 3.6f) },
+                        label = { Text("Use ${formatValue(prefillLandingSpeedMs * 3.6f)} km/h from Jump") }
+                    )
+                }
+                NumberField(
+                    label = "Target berm entry speed",
+                    value = targetSpeedText,
+                    onValueChange = { targetSpeedText = it },
+                    unit = "km/h",
+                    supportingText = "The speed you want to be carrying into the turn"
                 )
             }
 
-            Text(text = "Surface", style = MaterialTheme.typography.titleSmall)
-            FrictionPreset.entries.forEach { preset ->
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .selectable(
+            SectionCard(
+                title = "Run-out",
+                subtitle = "How much further you drop between the landing and the berm"
+            ) {
+                ElevationDeltaInput(
+                    label = "Drop from landing to berm",
+                    hint = if (landingAltitudeM != null) {
+                        "The landing is already set from the Jump tab - just walk to the berm " +
+                            "and capture B. Negative means the berm sits higher."
+                    } else {
+                        "A at the landing, B at the berm. Negative means the berm sits higher."
+                    },
+                    liveSensors = liveSensors,
+                    valueMeters = dropToBerm,
+                    onValueChange = { dropToBerm = it },
+                    presetPointA = landingAltitudeM,
+                    presetPointACaption = "from Jump",
+                    pointALabel = "landing",
+                    pointBLabel = "berm"
+                )
+            }
+
+            SectionCard(
+                title = "Surface",
+                subtitle = "How much grip you have to scrub speed with"
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = braking,
+                        onClick = { braking = true },
+                        label = { Text("On the brakes") }
+                    )
+                    FilterChip(
+                        selected = !braking,
+                        onClick = { braking = false },
+                        label = { Text("Coasting") }
+                    )
+                }
+
+                FrictionPreset.entries.forEach { preset ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectable(
+                                selected = selectedFriction == preset,
+                                onClick = { selectedFriction = preset }
+                            )
+                    ) {
+                        RadioButton(
                             selected = selectedFriction == preset,
                             onClick = { selectedFriction = preset }
                         )
-                ) {
-                    RadioButton(
-                        selected = selectedFriction == preset,
-                        onClick = { selectedFriction = preset }
-                    )
-                    Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                        Text(preset.label, style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            text = "${preset.description} · µ ${preset.mu(braking)}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                            Text(preset.label, style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                text = "${preset.description} · µ ${preset.mu(braking)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }
-        }
 
-        Button(
-            onClick = {
-                val landingSpeed = landingSpeedText.toFloatOrNull()
-                val targetSpeed = targetSpeedText.toFloatOrNull()
-                val gradient = gradientDeg
+            Button(
+                onClick = {
+                    val landingSpeed = landingSpeedText.toFloatOrNull()
+                    val targetSpeed = targetSpeedText.toFloatOrNull()
+                    val drop = dropToBerm
 
-                when {
-                    landingSpeed == null -> {
-                        inputProblem = "Enter the landing speed, or calculate a jump first."
-                        outcome = null
+                    when {
+                        landingSpeed == null -> {
+                            inputProblem = "Enter the landing speed, or calculate a jump first."
+                            outcome = null
+                        }
+                        targetSpeed == null -> {
+                            inputProblem = "Enter the speed you want to enter the berm at."
+                            outcome = null
+                        }
+                        drop == null -> {
+                            inputProblem = "Measure or type the drop from the landing to the berm."
+                            outcome = null
+                        }
+                        else -> {
+                            inputProblem = null
+                            outcome = Physics.bermRunOut(
+                                landingSpeedMs = landingSpeed / 3.6f,
+                                targetEntrySpeedMs = targetSpeed / 3.6f,
+                                dropToBermM = drop,
+                                mu = selectedFriction.mu(braking)
+                            )
+                        }
                     }
-                    targetSpeed == null -> {
-                        inputProblem = "Enter the speed you want to enter the berm at."
-                        outcome = null
-                    }
-                    gradient == null -> {
-                        inputProblem = "Measure or type the run-out gradient (0 if it is flat)."
-                        outcome = null
-                    }
-                    else -> {
-                        inputProblem = null
-                        outcome = Physics.bermApproachDistance(
-                            landingSpeedMs = landingSpeed / 3.6f,
-                            targetEntrySpeedMs = targetSpeed / 3.6f,
-                            gradientDeg = gradient,
-                            mu = selectedFriction.mu(braking)
-                        )
-                    }
-                }
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) { Text("Calculate distance") }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("Calculate run-out") }
 
-        inputProblem?.let { NoticeCard(it, isError = true) }
+            inputProblem?.let { NoticeCard(it, isError = true) }
 
-        when (val current = outcome) {
-            null -> Unit
-            is Physics.BermResult.NoBrakingNeeded -> NoticeCard(
-                "You land slower than your target speed - no run-out needed to slow down."
-            )
-            is Physics.BermResult.CannotSlow -> NoticeCard(
-                "Too steep to scrub speed here. On ${selectedFriction.label.lowercase()} you " +
-                    "stop gaining speed only below about ${formatValue(current.gradientLimitDeg)}° - " +
-                    "on this gradient you keep accelerating no matter how much run-out there is.",
-                isError = true
-            )
-            is Physics.BermResult.Distance -> ResultCard(
-                primaryLabel = "RUN-OUT NEEDED",
-                primaryValue = formatValue(current.distanceM),
-                primaryUnit = "m",
-                secondary = listOf(
-                    "Deceleration" to "${formatValue(current.decelerationG, 2)} g",
-                    "Height lost" to "${formatValue(current.elevationDropM)} m",
-                    "Surface" to selectedFriction.label
+            when (val current = outcome) {
+                null -> Unit
+                is Physics.BermResult.NoRunOutNeeded -> NoticeCard(
+                    "You arrive at or below your target speed already - no run-out needed to slow down."
                 )
-            )
+                is Physics.BermResult.Distance -> Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ResultCard(
+                        primaryLabel = "RUN-OUT NEEDED",
+                        primaryValue = formatValue(current.alongGroundM),
+                        primaryUnit = "m",
+                        secondary = listOf(
+                            "Flat distance" to "${formatValue(current.horizontalM)} m",
+                            "Drop used" to "${formatValue(current.dropM)} m",
+                            "Surface" to selectedFriction.label
+                        )
+                    )
+                    Text(
+                        text = "Measured along the ground. If the real gap to the berm is shorter " +
+                            "than this, you arrive hot.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
     }
 }

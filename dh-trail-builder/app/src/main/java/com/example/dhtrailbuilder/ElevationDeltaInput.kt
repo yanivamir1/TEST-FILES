@@ -35,10 +35,16 @@ fun ElevationDeltaInput(
     onValueChange: (Float?) -> Unit,
     modifier: Modifier = Modifier,
     hint: String? = null,
-    onInteract: () -> Unit = {}
+    onInteract: () -> Unit = {},
+    presetPointA: Float? = null,
+    presetPointACaption: String? = null,
+    pointALabel: String = "top",
+    pointBLabel: String = "bottom",
+    onPointBCaptured: (Float) -> Unit = {}
 ) {
-    var pointA by remember { mutableStateOf<Float?>(null) }
+    var pointA by remember(presetPointA) { mutableStateOf(presetPointA) }
     var pointB by remember { mutableStateOf<Float?>(null) }
+    var usingPreset by remember(presetPointA) { mutableStateOf(presetPointA != null) }
     var textValue by remember { mutableStateOf(valueMeters?.let { formatValue(it) } ?: "") }
 
     fun applyDelta() {
@@ -74,18 +80,29 @@ fun ElevationDeltaInput(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
             CapturePointButton(
                 name = "A",
-                subtitle = "top",
+                subtitle = if (usingPreset && presetPointACaption != null) presetPointACaption else pointALabel,
                 captured = pointA,
                 enabled = liveSensors.altitudeM != null,
-                onCapture = { onInteract(); pointA = liveSensors.altitudeM; applyDelta() },
+                onCapture = {
+                    onInteract()
+                    pointA = liveSensors.altitudeM
+                    usingPreset = false
+                    applyDelta()
+                },
                 modifier = Modifier.weight(1f)
             )
             CapturePointButton(
                 name = "B",
-                subtitle = "bottom",
+                subtitle = pointBLabel,
                 captured = pointB,
                 enabled = liveSensors.altitudeM != null,
-                onCapture = { onInteract(); pointB = liveSensors.altitudeM; applyDelta() },
+                onCapture = {
+                    onInteract()
+                    val captured = liveSensors.altitudeM
+                    pointB = captured
+                    captured?.let(onPointBCaptured)
+                    applyDelta()
+                },
                 modifier = Modifier.weight(1f)
             )
         }
@@ -95,6 +112,7 @@ fun ElevationDeltaInput(
                 onClick = {
                     pointA = null
                     pointB = null
+                    usingPreset = false
                 }
             ) { Text("Clear captured points") }
         }

@@ -1,6 +1,5 @@
 package com.example.dhtrailbuilder
 
-import kotlin.math.atan
 import kotlin.math.cos
 import kotlin.math.pow
 import kotlin.math.sin
@@ -35,82 +34,94 @@ object Physics {
         return sqrt(v2.coerceAtLeast(0f))
     }
 
-    data class JumpResult(
-        val distanceM: Float,
-        val landingSpeedMs: Float,
-        val airTimeSec: Float,
-        val lipSpeedMs: Float
-    )
+    sealed interface JumpResult {
+        data class Landed(
+            val distanceM: Float,
+            val landingSpeedMs: Float,
+            val airTimeSec: Float,
+            val lipSpeedMs: Float,
+            val peakAboveLipM: Float
+        ) : JumpResult
+
+        /** A step-up the arc never reaches: it peaks below the landing height. */
+        data class ShortOfLanding(
+            val peakAboveLipM: Float,
+            val neededAboveLipM: Float
+        ) : JumpResult
+    }
 
     /**
-     * Projectile motion from the ramp lip. landingDropM = lip height - landing height,
-     * must be >= 0 (landing below the lip, the normal case for a jump).
+     * Projectile motion from the ramp lip. landingDropM = lip height - landing height:
+     * positive when the landing sits below the lip (a normal jump), negative for a
+     * step-up where the landing is above the lip.
      */
-    fun computeJump(vLipMs: Float, rampAngleDeg: Float, landingDropM: Float): JumpResult? {
-        if (landingDropM < 0f) return null
-
+    fun computeJump(vLipMs: Float, rampAngleDeg: Float, landingDropM: Float): JumpResult {
         val angleRad = Math.toRadians(rampAngleDeg.toDouble())
         val vx = (vLipMs * cos(angleRad)).toFloat()
         val vy0 = (vLipMs * sin(angleRad)).toFloat()
+        val peakAboveLip = vy0 * vy0 / (2f * G)
 
-        // 0.5*g*t^2 - vy0*t - landingDropM = 0, positive root:
+        // 0.5*g*t^2 - vy0*t - landingDropM = 0. On a step-up the discriminant can go
+        // negative, which is exactly "the arc never climbs to the landing".
         val discriminant = vy0 * vy0 + 2 * G * landingDropM
+        if (discriminant < 0f) {
+            return JumpResult.ShortOfLanding(
+                peakAboveLipM = peakAboveLip,
+                neededAboveLipM = -landingDropM
+            )
+        }
+
         val t = (vy0 + sqrt(discriminant)) / G
         val vyLand = vy0 - G * t
 
-        return JumpResult(
+        return JumpResult.Landed(
             distanceM = vx * t,
             landingSpeedMs = sqrt(vx * vx + vyLand * vyLand),
             airTimeSec = t,
-            lipSpeedMs = vLipMs
+            lipSpeedMs = vLipMs,
+            peakAboveLipM = peakAboveLip
         )
     }
 
     sealed interface BermResult {
-        /** Distance needed, plus the deceleration achieved and the height lost over it. */
         data class Distance(
-            val distanceM: Float,
-            val decelerationG: Float,
-            val elevationDropM: Float
+            val horizontalM: Float,
+            val alongGroundM: Float,
+            val dropM: Float
         ) : BermResult
 
-        /** Already at or below the target speed on touchdown. */
-        object NoBrakingNeeded : BermResult
-
-        /** The run-out descends faster than this surface can scrub speed - you keep accelerating. */
-        data class CannotSlow(val gradientLimitDeg: Float) : BermResult
+        /** Already at or below the target speed without braking at all. */
+        object NoRunOutNeeded : BermResult
     }
 
     /**
-     * Distance needed after landing to get from landingSpeedMs down to targetEntrySpeedMs on a
-     * run-out of the given gradient (positive = descending) and surface.
+     * Run-out needed between the landing and the berm, to go from landingSpeedMs down to
+     * targetEntrySpeedMs given the measured drop between the two (positive = berm lower)
+     * and the surface.
      *
-     * Friction and gravity are resolved along the slope:
-     *     a = mu*g*cos(theta) - g*sin(theta)
-     * so a run-out steeper than the friction angle (atan(mu)) can never slow the rider down,
-     * which is reported rather than turned into a meaningless number.
+     * No gradient is needed. Friction work along a path of length d at gradient theta is
+     * mu*g*cos(theta)*d, and d*cos(theta) is exactly the horizontal distance x, so the
+     * slope's shape cancels out of the energy balance:
+     *
+     *     0.5*v1^2 + g*drop - mu*g*x = 0.5*v2^2     ->     x = (0.5*v1^2 + g*drop - 0.5*v2^2) / (mu*g)
+     *
+     * The along-the-ground distance you would pace out follows from the same two numbers.
      */
-    fun bermApproachDistance(
+    fun bermRunOut(
         landingSpeedMs: Float,
         targetEntrySpeedMs: Float,
-        gradientDeg: Float,
+        dropToBermM: Float,
         mu: Float
     ): BermResult {
-        if (targetEntrySpeedMs >= landingSpeedMs) return BermResult.NoBrakingNeeded
+        val energy = 0.5f * landingSpeedMs * landingSpeedMs + G * dropToBermM -
+            0.5f * targetEntrySpeedMs * targetEntrySpeedMs
+        if (energy <= 0f) return BermResult.NoRunOutNeeded
 
-        val theta = Math.toRadians(gradientDeg.toDouble())
-        val deceleration = (mu * G * cos(theta) - G * sin(theta)).toFloat()
-        if (deceleration <= 0f) {
-            val limit = Math.toDegrees(atan(mu.toDouble())).toFloat()
-            return BermResult.CannotSlow(gradientLimitDeg = limit)
-        }
-
-        val distance = (landingSpeedMs * landingSpeedMs - targetEntrySpeedMs * targetEntrySpeedMs) /
-            (2f * deceleration)
+        val horizontal = energy / (mu * G)
         return BermResult.Distance(
-            distanceM = distance,
-            decelerationG = deceleration / G,
-            elevationDropM = (distance * sin(theta)).toFloat()
+            horizontalM = horizontal,
+            alongGroundM = sqrt(horizontal * horizontal + dropToBermM * dropToBermM),
+            dropM = dropToBermM
         )
     }
 }

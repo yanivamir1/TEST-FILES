@@ -71,6 +71,7 @@ private fun AppRoot(
     val liveSensors = rememberLiveSensors(sensorRepository, angleRepository)
     var currentScreen by remember { mutableStateOf(Screen.Jump) }
     var lastJumpResult by remember { mutableStateOf<JumpScreenResult?>(null) }
+    var landingAltitudeM by remember { mutableStateOf<Float?>(null) }
 
     var hasLocationPermission by remember {
         mutableStateOf(
@@ -117,11 +118,13 @@ private fun AppRoot(
             when (currentScreen) {
                 Screen.Jump -> JumpCalculatorScreen(
                     liveSensors = liveSensors,
-                    onResult = { lastJumpResult = it }
+                    onResult = { lastJumpResult = it },
+                    onLandingAltitudeCaptured = { landingAltitudeM = it }
                 )
                 Screen.Berm -> BermDistanceScreen(
                     liveSensors = liveSensors,
-                    prefillLandingSpeedMs = lastJumpResult?.landingSpeedMs
+                    prefillLandingSpeedMs = lastJumpResult?.landingSpeedMs,
+                    landingAltitudeM = landingAltitudeM
                 )
                 Screen.RideLog -> TrailRunScreen(
                     sensorRepository = sensorRepository,

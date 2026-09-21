@@ -12,10 +12,12 @@ and "point B") - never absolute sea-level figures. The sign is always **A minus 
 | Field | Point A | Point B | Typical sign |
 |---|---|---|---|
 | Drop to the ramp lip | start point | ramp lip | positive (you descend) |
-| Drop from lip to landing | ramp lip | landing spot | positive (landing below the lip) |
+| Drop from lip to landing | ramp lip | landing spot | positive normally, **negative on a step-up** |
+| Drop from landing to berm | landing spot | berm | positive when the berm is lower |
 
-The berm screen does not take a height difference at all - it takes the **gradient**
-of the run-out (positive = descending), for the reason explained under part 2.
+The berm screen needs no angle at all - only that last height difference. Since the
+landing's altitude was already captured as point B of the previous measurement, the
+berm screen pre-fills it and you only capture the berm itself.
 
 ## Barometric altitude and calibration
 
@@ -64,8 +66,20 @@ t = [vy0 + √(vy0² + 2·g·landingDrop)] / g     (the physical positive root)
 **Jump distance** = `vx · t`.
 **Landing speed** = `√(vx² + vy_land²)` where `vy_land = vy0 − g·t`.
 
-If `landingDrop < 0` (the landing sits above the lip) the app refuses to compute
-and says so - that is not a normal jump geometry.
+### Step-ups (landing above the lip)
+
+`landingDrop` is signed, and a **negative** value means the landing sits *above* the
+lip - a step-up. The same quadratic still applies and the `+√` root is still the
+right one (on a step-up it is the descending crossing of the landing height). What
+changes is that the discriminant `vy0² + 2·g·landingDrop` can now go negative, and
+that is exactly the case "the arc never climbs that high": you would case the jump.
+The app reports the peak it does reach, `vy0²/(2g)`, against the height needed,
+rather than a distance.
+
+Worked example - 10 m/s off a 30° lip, landing 1 m above it: `vy0 = 5.0`,
+discriminant `25 − 19.62 = 5.38`, `t = 0.75 s`, **6.5 m**, peaking 1.27 m above the
+lip so it clears by 0.27 m. Move that landing to 1.5 m above the lip and the
+discriminant goes negative - you do not make it.
 
 ## Part 2 - distance to the berm
 
@@ -79,28 +93,39 @@ traction and by pitch-over, not by rolling drag. On packed trail that is
 Real braking on that surface is around 0.5 g - roughly **ten times** more
 deceleration, and under 10 m of run-out.
 
-The old version also asked for the measured **height difference** between landing
-and berm while solving for the **distance** between those same two points. Those
-are not independent: measuring both over-determines the geometry. The gradient of
-the run-out is what is actually knowable when planning a trail - and it can be
-measured by laying the phone on the ground.
+A second version then asked for the run-out's **gradient**, measured with the phone,
+on the grounds that taking both a height difference and a distance between the same
+two points over-determines the geometry. That reasoning was subtly wrong, and there
+is no ramp or angle out there to measure anyway - see below.
 
-### The model now
+### The model now: no angle at all
 
-Friction and gravity resolved along a run-out of gradient `θ` (positive = descending):
+Take the energy balance between the landing and the berm over a path of
+along-ground length `d` at gradient `θ`. Friction work is `µ·m·g·cos(θ)·d`, and
+`d·cos(θ)` is exactly the **horizontal** distance `x`, so the slope's shape cancels
+out entirely:
+
 ```
-a = µ·g·cos(θ) − g·sin(θ)
-d = (v_land² − v_target²) / (2·a)
+½·v_land² + g·Δh − µ·g·x = ½·v_target²
+    →   x = (½·v_land² + g·Δh − ½·v_target²) / (µ·g)      horizontal run-out
+    →   along the ground = √(x² + Δh²)                     what a tape measure gives
 ```
-Three distinct outcomes, all meaningful:
 
-- `v_target ≥ v_land` → you already land slow enough; no run-out needed.
-- `a ≤ 0` → the run-out descends faster than this surface can scrub speed, so you
-  keep accelerating no matter how long it is. The crossover is the friction angle,
-  `θ_max = atan(µ)`; the app reports that limit instead of a number.
-- otherwise → the distance, alongside the deceleration in **g** and the height lost
-  over it (`d·sin θ`), so the elevation information is still visible - now derived
-  consistently instead of being a second, conflicting input.
+So the only things needed are the landing speed, the target speed, the measured drop
+`Δh` from landing to berm, and `µ`. Height and horizontal distance *are* independent
+- the earlier objection only bites if you solve for the along-slope distance instead.
+
+Two outcomes:
+
+- numerator `≤ 0` → you arrive at or below the target speed already; no run-out needed.
+- otherwise → the distance, reported along the ground (headline) and flat, with the
+  drop that was used.
+
+The "too steep to scrub speed" case from the gradient model is gone, and provably
+so: the implied gradient `Δh/x` exceeds the friction angle only when
+`v_target > v_land`, which never happens while you are actually slowing down. What
+remains is a judgement call the app states plainly - if the real gap to the berm is
+shorter than the answer, you arrive hot.
 
 **Surface presets.** Braking values are traction-limited and capped near 0.6,
 because a bike pitches over the bars before it can use more grip than that.
@@ -115,8 +140,9 @@ Rolling values apply when coasting with the brakes off.
 | Loose scree / dust | 0.22 | 0.130 |
 | Wet roots or mud | 0.18 | 0.060 |
 
-Sanity check: 40 → 20 km/h on packed trail, braking, flat → `a = 4.9 m/s²`,
-`d ≈ 9.4 m`. That is a trail, not a runway.
+Sanity checks: 40 → 20 km/h on packed trail, braking, flat → **9.4 m**. That is a
+trail, not a runway. With 3 m of further drop down to the berm it becomes 15.4 m
+flat, 15.7 m along the ground - descending while you brake costs you distance.
 
 ## Part 3 - ride log (GPS + accelerometer)
 

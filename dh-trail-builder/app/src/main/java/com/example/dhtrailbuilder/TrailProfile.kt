@@ -1,8 +1,11 @@
 package com.example.dhtrailbuilder
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -10,6 +13,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextMeasurer
@@ -34,12 +38,12 @@ enum class TrailStep(val stepLabel: String, val title: String, val instruction: 
     Landing(
         stepLabel = "Step 3 of 3",
         title = "Drop to the landing",
-        instruction = "A back at the lip, B where you touch down"
+        instruction = "A back at the lip, B where you touch down. Negative means a step-up."
     ),
     RunOut(
         stepLabel = "Run-out",
         title = "Landing to berm",
-        instruction = "Lay the phone on the ground with its length pointing down the run-out"
+        instruction = "A at the landing, B at the berm - how much further you drop before the turn"
     )
 }
 
@@ -48,14 +52,16 @@ private val Start = Offset(0.04f, 0.16f)
 private val RampBase = Offset(0.34f, 0.63f)
 private val KickStart = Offset(0.39f, 0.615f)
 private val Lip = Offset(0.46f, 0.40f)
-private val LandingPoint = Offset(0.645f, 0.55f)
-private val RunOutStart = Offset(0.845f, 0.78f)
+private val LandingDown = Offset(0.645f, 0.55f)
+private val LandingUp = Offset(0.645f, 0.30f)
 private val RunOutEnd = Offset(0.90f, 0.81f)
 private val BermTop = Offset(0.985f, 0.56f)
 
 /**
- * Side view of the whole run, with the segment being measured highlighted and the A / B markers
- * sitting on the exact spots on the trail they refer to.
+ * Side view of the whole run. Every measurement point is drawn from the start: points that
+ * already have a value are filled in the accent colour with the value beside them, points
+ * still missing one are hollow and dim. The segment being measured is highlighted, and the
+ * highlight animates as the rider moves from one input to the next.
  */
 @OptIn(ExperimentalTextApi::class)
 @Composable
@@ -65,8 +71,8 @@ fun TrailProfile(
     dropToLipM: Float? = null,
     rampAngleDeg: Float? = null,
     landingDropM: Float? = null,
-    jumpDistanceM: Float? = null,
-    gradientDeg: Float? = null
+    dropToBermM: Float? = null,
+    jumpDistanceM: Float? = null
 ) {
     val measurer = rememberTextMeasurer()
     val accent = MaterialTheme.colorScheme.primary
@@ -74,90 +80,134 @@ fun TrailProfile(
     val dim = MaterialTheme.colorScheme.outline
     val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
 
+    val spring = tween<Float>(durationMillis = 350)
+    val rollInGlow by animateFloatAsState(
+        targetValue = if (activeStep == TrailStep.RollIn) 1f else 0f,
+        animationSpec = spring,
+        label = "rollInGlow"
+    )
+    val rampGlow by animateFloatAsState(
+        targetValue = if (activeStep == TrailStep.Ramp) 1f else 0f,
+        animationSpec = spring,
+        label = "rampGlow"
+    )
+    val landingGlow by animateFloatAsState(
+        targetValue = if (activeStep == TrailStep.Landing) 1f else 0f,
+        animationSpec = spring,
+        label = "landingGlow"
+    )
+    val runOutGlow by animateFloatAsState(
+        targetValue = if (activeStep == TrailStep.RunOut) 1f else 0f,
+        animationSpec = spring,
+        label = "runOutGlow"
+    )
+
+    // A step-up puts the landing above the lip; show the terrain the rider actually described.
+    val stepUp = (landingDropM ?: 0f) < 0f
+    val landingPoint = if (stepUp) LandingUp else LandingDown
+    val landingTarget by animateFloatAsState(
+        targetValue = if (stepUp) LandingUp.y else LandingDown.y,
+        animationSpec = spring,
+        label = "landingY"
+    )
+
     Canvas(modifier = modifier) {
-        val takeoffActive = activeStep == TrailStep.RollIn || activeStep == TrailStep.Ramp
-        val landingActive = activeStep == TrailStep.Landing
-        val runOutActive = activeStep == TrailStep.RunOut
+        val landing = Offset(landingPoint.x, landingTarget)
+        val takeoffGlow = maxOf(rollInGlow, rampGlow)
+        val landingSideGlow = maxOf(landingGlow, runOutGlow)
 
         drawTerrain(
-            takeoffColor = if (takeoffActive) accent else dim,
-            takeoffActive = takeoffActive,
-            landingColor = if (landingActive || runOutActive) accent else dim,
-            landingActive = landingActive || runOutActive,
-            trajectoryColor = dim
+            landing = landing,
+            takeoffColor = lerp(dim, accent, takeoffGlow),
+            takeoffGlow = takeoffGlow,
+            landingColor = lerp(dim, accent, landingSideGlow),
+            landingGlow = landingSideGlow,
+            trajectoryColor = dim,
+            kickerColor = lerp(dim, accent, maxOf(rampGlow, if (rampAngleDeg != null) 0.55f else 0f))
         )
 
-        when (activeStep) {
-            TrailStep.RollIn -> {
-                drawDimension(
-                    measurer = measurer,
-                    from = point(Start),
-                    to = point(Offset(Start.x, Lip.y)),
-                    across = point(Lip),
-                    label = dropToLipM?.let { "${formatValue(it)} m" },
-                    color = accent
-                )
-                drawMarker(measurer, point(Start), "A", accent, onAccent)
-                drawMarker(measurer, point(Lip), "B", accent, onAccent)
-            }
-
-            TrailStep.Ramp -> {
-                drawAngleArc(
-                    measurer = measurer,
-                    label = rampAngleDeg?.let { "${formatValue(it)}°" },
-                    color = accent
-                )
-                drawMarker(measurer, point(Lip), "", accent, onAccent)
-            }
-
-            TrailStep.Landing -> {
-                drawDimension(
-                    measurer = measurer,
-                    from = point(Lip),
-                    to = point(Offset(Lip.x, LandingPoint.y)),
-                    across = point(LandingPoint),
-                    label = landingDropM?.let { "${formatValue(it)} m" },
-                    color = accent
-                )
-                drawMarker(measurer, point(Lip), "A", accent, onAccent)
-                drawMarker(measurer, point(LandingPoint), "B", accent, onAccent)
-            }
-
-            TrailStep.RunOut -> {
-                drawHorizontalSpan(
-                    measurer = measurer,
-                    from = point(LandingPoint),
-                    to = point(RunOutEnd),
-                    label = gradientDeg?.let { "${formatValue(it)}° gradient" },
-                    color = accent
-                )
-            }
+        // The dimension bracket for whichever measurement is active, faded by its own glow.
+        if (rollInGlow > 0.01f) {
+            drawDimension(
+                measurer = measurer,
+                from = point(Start),
+                to = Offset(point(Start).x, point(Lip).y),
+                across = point(Lip),
+                label = dropToLipM?.let { "${formatValue(it)} m" },
+                color = accent.copy(alpha = rollInGlow)
+            )
+        }
+        if (rampGlow > 0.01f) {
+            drawAngleArc(
+                measurer = measurer,
+                label = rampAngleDeg?.let { "${formatValue(it)}°" },
+                color = accent.copy(alpha = rampGlow)
+            )
+        }
+        if (landingGlow > 0.01f) {
+            drawDimension(
+                measurer = measurer,
+                from = point(Lip),
+                to = Offset(point(Lip).x, landing.y),
+                across = landing,
+                label = landingDropM?.let {
+                    if (it < 0f) "${formatValue(-it)} m up" else "${formatValue(it)} m"
+                },
+                color = accent.copy(alpha = landingGlow)
+            )
+        }
+        if (runOutGlow > 0.01f) {
+            drawDimension(
+                measurer = measurer,
+                from = landing,
+                to = Offset(landing.x, point(BermTop).y),
+                across = point(BermTop),
+                label = dropToBermM?.let { "${formatValue(it)} m" },
+                color = accent.copy(alpha = runOutGlow)
+            )
         }
 
         jumpDistanceM?.let {
             drawHorizontalSpan(
                 measurer = measurer,
                 from = point(Lip),
-                to = point(LandingPoint),
+                to = landing,
                 label = "${formatValue(it)} m",
                 color = accent,
                 above = true
             )
         }
 
-        drawCaption(measurer, point(Offset(0.70f, 0.90f)), "landing", labelColor)
-        drawCaption(measurer, point(Offset(0.92f, 0.90f)), "berm", labelColor)
+        // Every point, always - filled once it has a value, hollow until then.
+        drawPoint(measurer, point(Start), "A", dropToLipM != null, rollInGlow, accent, onAccent, dim)
+        drawPoint(
+            measurer, point(Lip), "B",
+            dropToLipM != null || landingDropM != null,
+            maxOf(rollInGlow, rampGlow, landingGlow), accent, onAccent, dim
+        )
+        drawPoint(
+            measurer, landing, "C", landingDropM != null,
+            maxOf(landingGlow, runOutGlow), accent, onAccent, dim
+        )
+        drawPoint(measurer, point(BermTop), "D", dropToBermM != null, runOutGlow, accent, onAccent, dim)
+
+        drawCaption(measurer, point(Offset(0.04f, 0.95f)), "start", labelColor)
+        drawCaption(measurer, point(Offset(0.46f, 0.95f)), "lip", labelColor)
+        drawCaption(measurer, Offset(landing.x, size.height * 0.95f), "landing", labelColor)
+        drawCaption(measurer, point(Offset(0.93f, 0.95f)), "berm", labelColor)
     }
 }
 
 private fun DrawScope.point(p: Offset) = Offset(p.x * size.width, p.y * size.height)
 
 private fun DrawScope.drawTerrain(
+    landing: Offset,
     takeoffColor: Color,
-    takeoffActive: Boolean,
+    takeoffGlow: Float,
     landingColor: Color,
-    landingActive: Boolean,
-    trajectoryColor: Color
+    landingGlow: Float,
+    trajectoryColor: Color,
+    kickerColor: Color
 ) {
     val takeoff = Path().apply {
         moveTo(point(Start).x, point(Start).y)
@@ -172,9 +222,8 @@ private fun DrawScope.drawTerrain(
             point(Lip).x, point(Lip).y
         )
     }
-    val landing = Path().apply {
-        moveTo(point(LandingPoint).x, point(LandingPoint).y)
-        lineTo(point(RunOutStart).x, point(RunOutStart).y)
+    val landingSide = Path().apply {
+        moveTo(landing.x, landing.y)
         lineTo(point(RunOutEnd).x, point(RunOutEnd).y)
         quadraticBezierTo(
             point(Offset(0.965f, 0.81f)).x, point(Offset(0.965f, 0.81f)).y,
@@ -182,17 +231,21 @@ private fun DrawScope.drawTerrain(
         )
     }
 
-    fillUnder(takeoff, point(Lip).x, takeoffColor, takeoffActive)
-    fillUnder(landing, point(BermTop).x, landingColor, landingActive)
+    fillUnder(takeoff, point(Lip).x, takeoffColor, takeoffGlow)
+    fillUnder(landingSide, point(BermTop).x, landingColor, landingGlow)
 
-    drawPath(takeoff, takeoffColor, style = Stroke(width = if (takeoffActive) 7f else 4f))
-    drawPath(landing, landingColor, style = Stroke(width = if (landingActive) 7f else 4f))
+    drawPath(takeoff, takeoffColor, style = Stroke(width = 4f + 3f * takeoffGlow))
+    drawPath(landingSide, landingColor, style = Stroke(width = 4f + 3f * landingGlow))
+
+    // The kicker face, drawn over the takeoff so the ramp angle reads once it is known.
+    drawLine(kickerColor, point(KickStart), point(Lip), 6f)
 
     val trajectory = Path().apply {
         moveTo(point(Lip).x, point(Lip).y)
         quadraticBezierTo(
-            point(Offset(0.55f, 0.18f)).x, point(Offset(0.55f, 0.18f)).y,
-            point(LandingPoint).x, point(LandingPoint).y
+            (point(Lip).x + landing.x) / 2f,
+            minOf(point(Lip).y, landing.y) - size.height * 0.22f,
+            landing.x, landing.y
         )
     }
     drawPath(
@@ -205,14 +258,45 @@ private fun DrawScope.drawTerrain(
     )
 }
 
-private fun DrawScope.fillUnder(edge: Path, endX: Float, color: Color, active: Boolean) {
+private fun DrawScope.fillUnder(edge: Path, endX: Float, color: Color, glow: Float) {
     val filled = Path().apply {
         addPath(edge)
         lineTo(endX, size.height)
         lineTo(0f, size.height)
         close()
     }
-    drawPath(filled, color, alpha = if (active) 0.18f else 0.08f)
+    drawPath(filled, color, alpha = 0.08f + 0.10f * glow)
+}
+
+/** A measurement point: filled with its letter once measured, hollow while it is still missing. */
+@OptIn(ExperimentalTextApi::class)
+private fun DrawScope.drawPoint(
+    measurer: TextMeasurer,
+    center: Offset,
+    label: String,
+    hasValue: Boolean,
+    glow: Float,
+    accent: Color,
+    onAccent: Color,
+    dim: Color
+) {
+    val radius = 13f + 4f * glow
+    if (hasValue) {
+        if (glow > 0.01f) {
+            drawCircle(color = accent.copy(alpha = 0.25f * glow), radius = radius + 7f, center = center)
+        }
+        drawMarker(measurer, center, label, accent, onAccent, radius)
+    } else {
+        drawCircle(color = dim, radius = radius, center = center, style = Stroke(width = 3f))
+        val layout = measurer.measure(
+            AnnotatedString(label),
+            TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = dim)
+        )
+        drawText(
+            layout,
+            topLeft = Offset(center.x - layout.size.width / 2f, center.y - layout.size.height / 2f)
+        )
+    }
 }
 
 @OptIn(ExperimentalTextApi::class)
@@ -221,9 +305,10 @@ internal fun DrawScope.drawMarker(
     center: Offset,
     label: String,
     color: Color,
-    onColor: Color
+    onColor: Color,
+    radius: Float = 15f
 ) {
-    drawCircle(color = color, radius = 15f, center = center)
+    drawCircle(color = color, radius = radius, center = center)
     if (label.isEmpty()) return
     val layout = measurer.measure(
         AnnotatedString(label),
@@ -252,11 +337,6 @@ private fun DrawScope.drawDimension(
     drawLine(color, Offset(from.x, to.y), Offset(across.x, to.y), 2f, pathEffect = dash)
     drawLine(color, Offset(x, from.y), Offset(x, to.y), 4f)
 
-    drawLine(color, Offset(x - 7f, from.y + 10f), Offset(x, from.y), 4f)
-    drawLine(color, Offset(x + 7f, from.y + 10f), Offset(x, from.y), 4f)
-    drawLine(color, Offset(x - 7f, to.y - 10f), Offset(x, to.y), 4f)
-    drawLine(color, Offset(x + 7f, to.y - 10f), Offset(x, to.y), 4f)
-
     label ?: return
     val layout = measurer.measure(
         AnnotatedString(label),
@@ -265,7 +345,7 @@ private fun DrawScope.drawDimension(
     drawText(layout, topLeft = Offset(x + 12f, (from.y + to.y) / 2f - layout.size.height / 2f))
 }
 
-/** Horizontal span with end ticks, labelled - used for jump distance and run-out. */
+/** Horizontal span with end ticks, labelled - used for the jump distance. */
 @OptIn(ExperimentalTextApi::class)
 private fun DrawScope.drawHorizontalSpan(
     measurer: TextMeasurer,
@@ -275,7 +355,7 @@ private fun DrawScope.drawHorizontalSpan(
     color: Color,
     above: Boolean = false
 ) {
-    val y = if (above) minOf(from.y, to.y) - size.height * 0.10f
+    val y = if (above) minOf(from.y, to.y) - size.height * 0.12f
     else maxOf(from.y, to.y) + size.height * 0.08f
 
     drawLine(color, Offset(from.x, y), Offset(to.x, y), 3f)
@@ -304,7 +384,6 @@ private fun DrawScope.drawAngleArc(measurer: TextMeasurer, label: String?, color
         2f,
         pathEffect = PathEffect.dashPathEffect(floatArrayOf(7f, 7f))
     )
-    drawLine(color, base, lip, 6f)
 
     label ?: return
     val layout = measurer.measure(
@@ -323,7 +402,7 @@ private fun DrawScope.drawCaption(
 ) {
     val layout = measurer.measure(
         AnnotatedString(text),
-        TextStyle(fontSize = 11.sp, color = color)
+        TextStyle(fontSize = 10.sp, color = color)
     )
     drawText(layout, topLeft = Offset(at.x - layout.size.width / 2f, at.y))
 }
