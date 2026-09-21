@@ -118,13 +118,32 @@ Rolling values apply when coasting with the brakes off.
 Sanity check: 40 → 20 km/h on packed trail, braking, flat → `a = 4.9 m/s²`,
 `d ≈ 9.4 m`. That is a trail, not a runway.
 
-## Part 3 - ride log (GPS only)
+## Part 3 - ride log (GPS + accelerometer)
 
-Completely independent of the formulas above. Speed and altitude are read straight
-from GPS (`Location.getSpeed()`, `Location.getAltitude()`) over time and plotted.
-No physics, just a visualisation of raw measurements. Note that GPS altitude is
-height above the WGS84 ellipsoid and is far less precise than the barometer - the
-barometer is what the measurement widgets use.
+Independent of the formulas above, and checks them against a real run instead of
+computing anything itself. Speed and altitude are read from GPS
+(`Location.getSpeed()`, `Location.getAltitude()`) and plotted against **ground
+distance covered** (accumulated between fixes with `Location.distanceBetween`) so
+the chart is a literal side profile of the ride, drawn the same way as the
+calculator diagrams. Note that GPS altitude is height above the WGS84 ellipsoid and
+is far less precise than the barometer - the barometer is what the measurement
+widgets use.
+
+### Jump detection: free-fall from the raw accelerometer
+
+While airborne, the phone (mounted on the bike) is in free-fall: the raw
+accelerometer's proper-acceleration magnitude (`√(x²+y²+z²)`) drops to roughly zero,
+versus ~9.8 m/s² at rest or riding. `JumpDetector` watches for a sustained dip below
+~3 m/s² lasting between 200 ms and 4 s and reports it as a jump, mapping the
+takeoff/landing timestamps onto the nearest GPS samples to read off distance,
+altitude and speed. When a jump was also calculated on the Jump tab, the actual
+distance is shown next to the prediction.
+
+**This is a heuristic, not a measurement.** It depends on the phone being mounted
+firmly to the bike (in a pocket it will pick up body movement instead of the bike's
+motion); the thresholds are tuned for a "normal" dirt-jump-sized hop and can miss a
+very short hop or mistake a hard landing/rebound for a second jump. Treat a detected
+distance as a rough real-world check, not ground truth.
 
 ## Known limitations
 
@@ -137,3 +156,7 @@ barometer is what the measurement widgets use.
   part 1 ignores - the lip speed it predicts is slightly optimistic.
 - Barometric measurement is sensitive to weather changes between the two captures -
   take point A and point B close together in time.
+- The ramp/gradient angle reads the phone's **length** axis (top-to-bottom) - lay
+  the phone down pointing along the slope, not across it, or the reading is
+  meaningless.
+- Jump detection can miss jumps or mistake bumps/landings for jumps; see part 3.

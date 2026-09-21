@@ -1,6 +1,6 @@
 package com.example.dhtrailbuilder
 
-import androidx.compose.foundation.Canvas
+import android.location.Location
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,30 +22,90 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
-data class RunSample(val elapsedSec: Float, val speedKmh: Float, val altitudeM: Float)
+data class RunSample(
+    val timestampMs: Long,
+    val cumulativeDistanceM: Float,
+    val speedKmh: Float,
+    val altitudeM: Float
+)
 
 @Composable
 fun TrailRunScreen(
+    sensorRepository: SensorRepository,
     locationRepository: LocationRepository,
     hasLocationPermission: Boolean,
     onRequestPermission: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    predictedJump: JumpScreenResult? = null
 ) {
     val scope = rememberCoroutineScope()
     val samples = remember { mutableStateListOf<RunSample>() }
     var isRecording by remember { mutableStateOf(false) }
-    var recordingJob by remember { mutableStateOf<Job?>(null) }
-    var startTimeMs by remember { mutableStateOf(0L) }
+    var locationJob by remember { mutableStateOf<Job?>(null) }
+    var accelJob by remember { mutableStateOf<Job?>(null) }
+    var detectedJump by remember { mutableStateOf<JumpEvent?>(null) }
 
     DisposableEffect(Unit) {
-        onDispose { recordingJob?.cancel() }
+        onDispose {
+            locationJob?.cancel()
+            accelJob?.cancel()
+        }
+    }
+
+    fun startRecording() {
+        samples.clear()
+        detectedJump = null
+        isRecording = true
+
+        var lastLat: Double? = null
+        var lastLon: Double? = null
+        var cumulativeDistance = 0f
+
+        locationJob = scope.launch {
+            locationRepository.locationFlow().collect { sample ->
+                val speed = sample.speedKmh
+                val altitude = sample.altitudeMeters
+                val lat = sample.latitude
+                val lon = sample.longitude
+                if (speed != null && altitude != null && lat != null && lon != null) {
+                    val prevLat = lastLat
+                    val prevLon = lastLon
+                    if (prevLat != null && prevLon != null) {
+                        val results = FloatArray(1)
+                        Location.distanceBetween(prevLat, prevLon, lat, lon, results)
+                        cumulativeDistance += results[0]
+                    }
+                    lastLat = lat
+                    lastLon = lon
+                    samples.add(
+                        RunSample(
+                            timestampMs = System.currentTimeMillis(),
+                            cumulativeDistanceM = cumulativeDistance,
+                            speedKmh = speed,
+                            altitudeM = altitude
+                        )
+                    )
+                }
+            }
+        }
+
+        val detector = JumpDetector()
+        accelJob = scope.launch {
+            sensorRepository.accelerationMagnitudeFlow().collect { magnitude ->
+                val event = detector.onSample(magnitude, System.currentTimeMillis())
+                if (event != null) detectedJump = event
+            }
+        }
+    }
+
+    fun stopRecording() {
+        locationJob?.cancel()
+        accelJob?.cancel()
+        isRecording = false
     }
 
     Column(
@@ -58,7 +118,7 @@ fun TrailRunScreen(
         when {
             !hasLocationPermission -> SectionCard(
                 title = "Ride log",
-                subtitle = "Records GPS speed and altitude while you ride"
+                subtitle = "Checks the calculated jump against a real run"
             ) {
                 Text(
                     "Location permission is required to record a run.",
@@ -77,37 +137,18 @@ fun TrailRunScreen(
             else -> {
                 SectionCard(
                     title = "Ride log",
-                    subtitle = "Records GPS speed and altitude while you ride"
+                    subtitle = "Checks the calculated jump against a real run"
                 ) {
                     Button(
-                        onClick = {
-                            if (isRecording) {
-                                recordingJob?.cancel()
-                                isRecording = false
-                            } else {
-                                samples.clear()
-                                startTimeMs = System.currentTimeMillis()
-                                isRecording = true
-                                recordingJob = scope.launch {
-                                    locationRepository.locationFlow().collect { sample ->
-                                        val speed = sample.speedKmh
-                                        val altitude = sample.altitudeMeters
-                                        if (speed != null && altitude != null) {
-                                            val elapsed =
-                                                (System.currentTimeMillis() - startTimeMs) / 1000f
-                                            samples.add(RunSample(elapsed, speed, altitude))
-                                        }
-                                    }
-                                }
-                            }
-                        },
+                        onClick = { if (isRecording) stopRecording() else startRecording() },
                         modifier = Modifier.fillMaxWidth()
                     ) { Text(if (isRecording) "Stop recording" else "Start recording") }
 
                     Text(
                         text = when {
                             isRecording -> "Recording · ${samples.size} points"
-                            samples.isEmpty() -> "Waiting to start. Keep the phone on you and ride the run-in."
+                            samples.isEmpty() ->
+                                "Waiting to start. Keep the phone on the bike for the whole run-in, jump and landing."
                             else -> "Stopped · ${samples.size} points"
                         },
                         style = MaterialTheme.typography.bodySmall,
@@ -118,14 +159,26 @@ fun TrailRunScreen(
                 if (samples.isNotEmpty()) {
                     RunStats(samples)
 
-                    SectionCard(title = "Altitude", subtitle = "meters over time") {
-                        TrailChart(
-                            values = samples.map { it.elapsedSec to it.altitudeM },
-                            lineColor = MaterialTheme.colorScheme.primary,
-                            gridColor = MaterialTheme.colorScheme.outline,
+                    val (takeoffMarker, landingMarker) = detectedJump?.let { event ->
+                        val takeoffSample = samples.minByOrNull { kotlin.math.abs(it.timestampMs - event.takeoffAtMs) }
+                        val landingSample = samples.minByOrNull { kotlin.math.abs(it.timestampMs - event.landingAtMs) }
+                        if (takeoffSample != null && landingSample != null) {
+                            JumpMarker(takeoffSample.cumulativeDistanceM, takeoffSample.altitudeM) to
+                                JumpMarker(landingSample.cumulativeDistanceM, landingSample.altitudeM)
+                        } else null to null
+                    } ?: (null to null)
+
+                    SectionCard(
+                        title = "Trail profile",
+                        subtitle = "Altitude over ground distance covered"
+                    ) {
+                        RideProfileChart(
+                            samples = samples,
+                            takeoff = takeoffMarker,
+                            landing = landingMarker,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(140.dp)
+                                .height(160.dp)
                         )
                         AxisLabels(
                             minValue = samples.minOf { it.altitudeM },
@@ -134,19 +187,11 @@ fun TrailRunScreen(
                         )
                     }
 
-                    SectionCard(title = "Speed", subtitle = "km/h over time") {
-                        TrailChart(
-                            values = samples.map { it.elapsedSec to it.speedKmh },
-                            lineColor = MaterialTheme.colorScheme.secondary,
-                            gridColor = MaterialTheme.colorScheme.outline,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(140.dp)
-                        )
-                        AxisLabels(
-                            minValue = samples.minOf { it.speedKmh },
-                            maxValue = samples.maxOf { it.speedKmh },
-                            unit = "km/h"
+                    if (!isRecording) {
+                        JumpComparisonCard(
+                            samples = samples,
+                            detectedJump = detectedJump,
+                            predictedJump = predictedJump
                         )
                     }
                 }
@@ -156,10 +201,52 @@ fun TrailRunScreen(
 }
 
 @Composable
+private fun JumpComparisonCard(
+    samples: List<RunSample>,
+    detectedJump: JumpEvent?,
+    predictedJump: JumpScreenResult?
+) {
+    if (detectedJump == null) {
+        NoticeCard(
+            "No jump detected this run. Ride the whole run-in, jump and landing with the " +
+                "phone mounted on the bike for it to catch the airborne moment."
+        )
+        return
+    }
+
+    val takeoffSample = samples.minByOrNull { kotlin.math.abs(it.timestampMs - detectedJump.takeoffAtMs) }
+    val landingSample = samples.minByOrNull { kotlin.math.abs(it.timestampMs - detectedJump.landingAtMs) }
+    if (takeoffSample == null || landingSample == null) return
+
+    val actualDistance = landingSample.cumulativeDistanceM - takeoffSample.cumulativeDistanceM
+    val airTimeSec = (detectedJump.landingAtMs - detectedJump.takeoffAtMs) / 1000f
+    val landingSpeed = landingSample.speedKmh
+
+    val secondary = mutableListOf(
+        "Air time" to "${formatValue(airTimeSec, 2)} s",
+        "Landing speed" to "${formatValue(landingSpeed)} km/h"
+    )
+
+    predictedJump?.let { predicted ->
+        val delta = actualDistance - predicted.distanceM
+        val sign = if (delta >= 0) "+" else ""
+        secondary.add(0, "Predicted" to "${formatValue(predicted.distanceM)} m")
+        secondary.add(1, "Difference" to "$sign${formatValue(delta)} m")
+    }
+
+    ResultCard(
+        primaryLabel = "DETECTED JUMP",
+        primaryValue = formatValue(actualDistance),
+        primaryUnit = "m",
+        secondary = secondary
+    )
+}
+
+@Composable
 private fun RunStats(samples: List<RunSample>) {
     val maxSpeed = samples.maxOf { it.speedKmh }
-    val duration = samples.last().elapsedSec
     val gain = samples.maxOf { it.altitudeM } - samples.minOf { it.altitudeM }
+    val distance = samples.last().cumulativeDistanceM
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -167,7 +254,7 @@ private fun RunStats(samples: List<RunSample>) {
     ) {
         ReadoutTile(label = "TOP SPEED", value = formatValue(maxSpeed), unit = "km/h")
         ReadoutTile(label = "ELEVATION RANGE", value = formatValue(gain), unit = "m")
-        ReadoutTile(label = "DURATION", value = formatValue(duration, 0), unit = "s")
+        ReadoutTile(label = "DISTANCE", value = formatValue(distance, 0), unit = "m")
     }
 }
 
@@ -187,62 +274,5 @@ private fun AxisLabels(minValue: Float, maxValue: Float, unit: String) {
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-    }
-}
-
-@Composable
-private fun TrailChart(
-    values: List<Pair<Float, Float>>,
-    lineColor: Color,
-    gridColor: Color,
-    modifier: Modifier = Modifier
-) {
-    Canvas(modifier = modifier) {
-        // Horizontal grid lines, drawn regardless of how much data there is.
-        val gridLines = 4
-        for (i in 0..gridLines) {
-            val y = size.height * i / gridLines
-            drawLine(
-                color = gridColor.copy(alpha = 0.25f),
-                start = Offset(0f, y),
-                end = Offset(size.width, y),
-                strokeWidth = 1.5f
-            )
-        }
-
-        if (values.size < 2) return@Canvas
-
-        val minX = values.first().first
-        val maxX = values.last().first
-        val minY = values.minOf { it.second }
-        val maxY = values.maxOf { it.second }
-        val xRange = (maxX - minX).coerceAtLeast(0.001f)
-        val yRange = (maxY - minY).coerceAtLeast(0.001f)
-        val inset = size.height * 0.08f
-
-        val points = values.map { (x, y) ->
-            Offset(
-                x = (x - minX) / xRange * size.width,
-                y = size.height - inset - (y - minY) / yRange * (size.height - 2 * inset)
-            )
-        }
-
-        // Filled area under the trace.
-        val area = Path().apply {
-            moveTo(points.first().x, size.height)
-            points.forEach { lineTo(it.x, it.y) }
-            lineTo(points.last().x, size.height)
-            close()
-        }
-        drawPath(path = area, color = lineColor.copy(alpha = 0.18f))
-
-        for (i in 0 until points.size - 1) {
-            drawLine(
-                color = lineColor,
-                start = points[i],
-                end = points[i + 1],
-                strokeWidth = 5f
-            )
-        }
     }
 }

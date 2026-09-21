@@ -23,9 +23,9 @@ import kotlinx.coroutines.launch
 class LiveSensorState {
     var pressureHpa: Float? by mutableStateOf(null)
         internal set
-    var pitchDeg: Float? by mutableStateOf(null)
+    var lengthTiltDeg: Float? by mutableStateOf(null)
         internal set
-    var rollDeg: Float? by mutableStateOf(null)
+    var widthTiltDeg: Float? by mutableStateOf(null)
         internal set
     var barometerAvailable: Boolean by mutableStateOf(true)
         internal set
@@ -85,8 +85,8 @@ fun rememberLiveSensors(
                         angleRepository.angleFlow().collect { reading ->
                             when (reading) {
                                 is AngleReading.Value -> {
-                                    state.pitchDeg = reading.pitchDeg
-                                    state.rollDeg = reading.rollDeg
+                                    state.lengthTiltDeg = reading.lengthTiltDeg
+                                    state.widthTiltDeg = reading.widthTiltDeg
                                     state.accelerometerAvailable = true
                                 }
                                 is AngleReading.Unavailable -> state.accelerometerAvailable = false

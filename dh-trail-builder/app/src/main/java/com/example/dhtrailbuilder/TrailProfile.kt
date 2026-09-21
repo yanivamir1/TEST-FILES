@@ -29,7 +29,7 @@ enum class TrailStep(val stepLabel: String, val title: String, val instruction: 
     Ramp(
         stepLabel = "Step 2 of 3",
         title = "Ramp angle",
-        instruction = "Lay the phone flat on the ramp face"
+        instruction = "Lay the phone on the ramp face with its length pointing down the slope"
     ),
     Landing(
         stepLabel = "Step 3 of 3",
@@ -39,7 +39,7 @@ enum class TrailStep(val stepLabel: String, val title: String, val instruction: 
     RunOut(
         stepLabel = "Run-out",
         title = "Landing to berm",
-        instruction = "Lay the phone on the ground between the landing and the berm"
+        instruction = "Lay the phone on the ground with its length pointing down the run-out"
     )
 }
 
@@ -216,7 +216,7 @@ private fun DrawScope.fillUnder(edge: Path, endX: Float, color: Color, active: B
 }
 
 @OptIn(ExperimentalTextApi::class)
-private fun DrawScope.drawMarker(
+internal fun DrawScope.drawMarker(
     measurer: TextMeasurer,
     center: Offset,
     label: String,

@@ -95,8 +95,8 @@ private fun liveAltitudeText(liveSensors: LiveSensorState): String = when {
 
 private fun liveTiltText(liveSensors: LiveSensorState): String = when {
     !liveSensors.accelerometerAvailable -> "no sensor"
-    liveSensors.pitchDeg == null -> "—"
-    else -> "${formatValue(kotlin.math.abs(liveSensors.pitchDeg!!))}°"
+    liveSensors.lengthTiltDeg == null -> "—"
+    else -> "${formatValue(kotlin.math.abs(liveSensors.lengthTiltDeg!!))}°"
 }
 
 @Composable

@@ -12,8 +12,12 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 
 sealed class AngleReading {
-    /** pitchDeg: tilt forward/back around the phone's side-to-side axis. rollDeg: tilt left/right. */
-    data class Value(val pitchDeg: Float, val rollDeg: Float) : AngleReading()
+    /**
+     * lengthTiltDeg: incline along the phone's length (top-to-bottom, the Y axis) - this is
+     * the ramp/gradient angle when the phone is laid down pointing along the slope.
+     * widthTiltDeg: side-to-side tilt (the X axis) - not used for ramp measurements.
+     */
+    data class Value(val lengthTiltDeg: Float, val widthTiltDeg: Float) : AngleReading()
     object Unavailable : AngleReading()
 }
 
@@ -34,11 +38,13 @@ class AngleRepository(context: Context) {
                 val x = event.values[0]
                 val y = event.values[1]
                 val z = event.values[2]
-                val pitch = Math.toDegrees(
-                    atan2(-x.toDouble(), sqrt((y * y + z * z).toDouble()))
+                val lengthTilt = Math.toDegrees(
+                    atan2(-y.toDouble(), sqrt((x * x + z * z).toDouble()))
                 ).toFloat()
-                val roll = Math.toDegrees(atan2(y.toDouble(), z.toDouble())).toFloat()
-                trySend(AngleReading.Value(pitchDeg = pitch, rollDeg = roll))
+                val widthTilt = Math.toDegrees(
+                    atan2(x.toDouble(), sqrt((y * y + z * z).toDouble()))
+                ).toFloat()
+                trySend(AngleReading.Value(lengthTiltDeg = lengthTilt, widthTiltDeg = widthTilt))
             }
 
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}

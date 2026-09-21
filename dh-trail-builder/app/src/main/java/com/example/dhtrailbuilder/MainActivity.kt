@@ -124,11 +124,13 @@ private fun AppRoot(
                     prefillLandingSpeedMs = lastJumpResult?.landingSpeedMs
                 )
                 Screen.RideLog -> TrailRunScreen(
+                    sensorRepository = sensorRepository,
                     locationRepository = locationRepository,
                     hasLocationPermission = hasLocationPermission,
                     onRequestPermission = {
                         permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-                    }
+                    },
+                    predictedJump = lastJumpResult
                 )
             }
         }

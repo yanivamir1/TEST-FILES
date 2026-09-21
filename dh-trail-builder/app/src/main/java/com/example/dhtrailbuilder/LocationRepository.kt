@@ -14,8 +14,14 @@ import kotlinx.coroutines.flow.callbackFlow
  * speedKmh / altitudeMeters are null until the GPS provider delivers a fix carrying that value.
  * altitudeMeters is height above the WGS84 ellipsoid - fine for a relative speed/altitude graph,
  * not an absolute sea-level reference (use the barometer for that, see SensorRepository).
+ * latitude / longitude are null only when there is no fix at all yet.
  */
-data class LocationSample(val speedKmh: Float?, val altitudeMeters: Float?)
+data class LocationSample(
+    val speedKmh: Float?,
+    val altitudeMeters: Float?,
+    val latitude: Double? = null,
+    val longitude: Double? = null
+)
 
 class LocationRepository(context: Context) {
     private val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
@@ -35,7 +41,14 @@ class LocationRepository(context: Context) {
             override fun onLocationChanged(location: Location) {
                 val speed = if (location.hasSpeed()) location.speed * 3.6f else null
                 val altitude = if (location.hasAltitude()) location.altitude.toFloat() else null
-                trySend(LocationSample(speedKmh = speed, altitudeMeters = altitude))
+                trySend(
+                    LocationSample(
+                        speedKmh = speed,
+                        altitudeMeters = altitude,
+                        latitude = location.latitude,
+                        longitude = location.longitude
+                    )
+                )
             }
 
             @Deprecated("Deprecated in Java, still called on older API levels")

@@ -40,7 +40,7 @@ fun AngleMeasureInput(
     onInteract: () -> Unit = {}
 ) {
     var textValue by remember { mutableStateOf(valueDeg?.let { formatValue(it) } ?: "") }
-    val liveAngle = liveSensors.pitchDeg?.let { abs(it) }
+    val liveAngle = liveSensors.lengthTiltDeg?.let { abs(it) }
 
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
