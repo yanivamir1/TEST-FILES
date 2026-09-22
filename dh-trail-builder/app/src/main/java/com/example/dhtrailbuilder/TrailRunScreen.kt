@@ -13,6 +13,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -29,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import java.util.Locale
 import java.util.UUID
 import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -103,7 +105,10 @@ fun TrailRunScreen(
                     lastFix = fix
                     val lat = fix.latitude
                     val lon = fix.longitude
-                    val altitude = fix.altitudeMeters
+                    // The barometer is what the rest of the app measures and calibrates against -
+                    // GPS altitude is a different reference and commonly tens of meters off.
+                    // Fall back to it only when there is no barometer at all.
+                    val altitude = liveSensors.altitudeM ?: fix.altitudeMeters
                     if (lat == null || lon == null || altitude == null) return@collect
 
                     val prevLat = lastLat
@@ -256,6 +261,10 @@ fun RunResultsSection(
     val takeoffSample = detectedJump?.let { nearestSample(samples, it.takeoffAtMs) }
     val landingSample = detectedJump?.let { nearestSample(samples, it.landingAtMs) }
 
+    var userScrubIndex by remember { mutableStateOf<Int?>(null) }
+    val scrubIndex = (userScrubIndex ?: samples.lastIndex).coerceIn(0, samples.lastIndex)
+    val scrubSample = samples[scrubIndex]
+
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         RunStats(samples, useDistance)
 
@@ -271,6 +280,8 @@ fun RunResultsSection(
                 landing = landingSample?.let {
                     JumpMarker(if (useDistance) it.cumulativeDistanceM ?: 0f else it.elapsedSec, it.altitudeM)
                 },
+                cursor = (if (useDistance) scrubSample.cumulativeDistanceM ?: 0f else scrubSample.elapsedSec) to
+                    scrubSample.altitudeM,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(150.dp)
@@ -279,6 +290,14 @@ fun RunResultsSection(
                 minValue = samples.minOf { it.altitudeM },
                 maxValue = samples.maxOf { it.altitudeM },
                 unit = "m"
+            )
+
+            ScrubReadout(sample = scrubSample, useDistance = useDistance)
+            Slider(
+                value = scrubIndex.toFloat(),
+                onValueChange = { userScrubIndex = it.roundToInt() },
+                valueRange = 0f..samples.lastIndex.toFloat().coerceAtLeast(0f),
+                steps = (samples.size - 2).coerceAtLeast(0)
             )
         }
 
@@ -450,6 +469,31 @@ private fun RunStats(samples: List<RunSample>, useDistance: Boolean) {
             )
         }
         ReadoutTile(label = "ELEVATION RANGE", value = formatValue(gain), unit = "m")
+    }
+}
+
+/** The value the finger is currently over, shown above the slider. */
+@Composable
+private fun ScrubReadout(sample: RunSample, useDistance: Boolean) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        ReadoutTile(label = "ALTITUDE", value = formatValue(sample.altitudeM), unit = "m")
+        if (useDistance) {
+            ReadoutTile(
+                label = "SPEED",
+                value = formatValue(sample.speedKmh ?: 0f),
+                unit = "km/h"
+            )
+            ReadoutTile(
+                label = "AT",
+                value = formatValue(sample.cumulativeDistanceM ?: 0f, 0),
+                unit = "m"
+            )
+        } else {
+            ReadoutTile(label = "AT", value = formatValue(sample.elapsedSec, 0), unit = "s")
+        }
     }
 }
 

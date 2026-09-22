@@ -26,11 +26,14 @@ fun RideProfileChart(
     points: List<Pair<Float, Float>>,
     modifier: Modifier = Modifier,
     takeoff: JumpMarker? = null,
-    landing: JumpMarker? = null
+    landing: JumpMarker? = null,
+    cursor: Pair<Float, Float>? = null
 ) {
     val measurer = rememberTextMeasurer()
     val accent = MaterialTheme.colorScheme.primary
     val onAccent = MaterialTheme.colorScheme.onPrimary
+    val cursorColor = MaterialTheme.colorScheme.secondary
+    val onCursorColor = MaterialTheme.colorScheme.onSecondary
     val gridColor = MaterialTheme.colorScheme.outline
 
     Canvas(modifier = modifier) {
@@ -97,6 +100,18 @@ fun RideProfileChart(
 
             drawMarker(measurer, takeoffPoint, "T", accent, onAccent)
             drawMarker(measurer, landingPoint, "L", accent, onAccent)
+        }
+
+        cursor?.let { (x, altitude) ->
+            val cursorPoint = toOffset(x, altitude)
+            drawLine(
+                color = cursorColor,
+                start = Offset(cursorPoint.x, 0f),
+                end = Offset(cursorPoint.x, size.height),
+                strokeWidth = 2f,
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f))
+            )
+            drawMarker(measurer, cursorPoint, "", cursorColor, onCursorColor, radius = 10f)
         }
     }
 }

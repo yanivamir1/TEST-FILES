@@ -147,13 +147,16 @@ flat, 15.7 m along the ground - descending while you brake costs you distance.
 ## Part 3 - ride log (GPS + accelerometer)
 
 Independent of the formulas above, and checks them against a real run instead of
-computing anything itself. Speed and altitude are read from GPS
-(`Location.getSpeed()`, `Location.getAltitude()`) and plotted against **ground
-distance covered** (accumulated between fixes with `Location.distanceBetween`) so
-the chart is a literal side profile of the ride, drawn the same way as the
-calculator diagrams. Note that GPS altitude is height above the WGS84 ellipsoid and
-is far less precise than the barometer - the barometer is what the measurement
-widgets use.
+computing anything itself. Speed and position come from GPS (`Location.getSpeed()`,
+accumulated ground distance via `Location.distanceBetween` between fixes), but
+**altitude comes from the barometer**, not `Location.getAltitude()`: GPS altitude is
+height above the WGS84 ellipsoid, a different reference from the calibrated,
+sea-level altitude the rest of the app measures against, and is commonly tens of
+meters off. Using it here would make the ride log disagree with the Jump and Berm
+screens' own numbers for no good reason. GPS altitude is used only as a fallback on
+a device with no barometer at all. The chart is a literal side profile of the ride
+- altitude against ground distance covered - drawn the same way as the calculator
+diagrams.
 
 ### Jump detection: free-fall from the raw accelerometer
 
