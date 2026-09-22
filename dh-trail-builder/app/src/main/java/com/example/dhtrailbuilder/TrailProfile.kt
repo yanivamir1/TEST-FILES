@@ -56,7 +56,7 @@ fun TrailProfile(
 ) {
     val measurer = rememberTextMeasurer()
     val accent = MaterialTheme.colorScheme.primary
-    val dim = MaterialTheme.colorScheme.outline
+    val dim = MaterialTheme.colorScheme.onSurfaceVariant
     val caption = MaterialTheme.colorScheme.onSurfaceVariant
 
     val spec = tween<Float>(durationMillis = 300)

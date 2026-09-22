@@ -24,7 +24,7 @@ fun BermProfile(
 ) {
     val measurer = androidx.compose.ui.text.rememberTextMeasurer()
     val accent = MaterialTheme.colorScheme.primary
-    val dim = MaterialTheme.colorScheme.outline
+    val dim = MaterialTheme.colorScheme.onSurfaceVariant
     val caption = MaterialTheme.colorScheme.onSurfaceVariant
 
     Canvas(modifier = modifier) {

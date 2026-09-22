@@ -1,6 +1,7 @@
 package com.example.dhtrailbuilder
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -55,9 +56,12 @@ fun LiveSensorBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outline
+            )
             .clickable(enabled = liveSensors.barometerAvailable) { showCalibration = true }
-            .padding(horizontal = 12.dp, vertical = 3.dp),
+            .padding(horizontal = 12.dp, vertical = 5.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -105,7 +109,7 @@ fun LiveSensorBar(
 
 @Composable
 private fun GpsDot(enabled: Boolean) {
-    val color = if (enabled) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outline
+    val color = if (enabled) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant
     Box(
         modifier = Modifier
             .size(7.dp)

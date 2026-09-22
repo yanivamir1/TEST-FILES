@@ -34,7 +34,7 @@ fun RideProfileChart(
     val onAccent = MaterialTheme.colorScheme.onPrimary
     val cursorColor = MaterialTheme.colorScheme.secondary
     val onCursorColor = MaterialTheme.colorScheme.onSecondary
-    val gridColor = MaterialTheme.colorScheme.outline
+    val gridColor = MaterialTheme.colorScheme.onSurfaceVariant
 
     Canvas(modifier = modifier) {
         val gridLines = 4

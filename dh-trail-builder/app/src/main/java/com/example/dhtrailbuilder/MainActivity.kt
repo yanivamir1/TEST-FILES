@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -46,10 +45,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             DhTrailBuilderTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
+                AppBackground {
                     AppRoot(sensorRepository, locationRepository, angleRepository)
                 }
             }
@@ -95,12 +91,21 @@ private fun AppRoot(
             hasLocationPermission = hasLocationPermission
         )
 
-        TabRow(selectedTabIndex = currentScreen.ordinal) {
+        TabRow(
+            selectedTabIndex = currentScreen.ordinal,
+            containerColor = androidx.compose.ui.graphics.Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            divider = {
+                androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+            }
+        ) {
             Screen.entries.forEach { screen ->
                 Tab(
                     selected = screen == currentScreen,
                     onClick = { currentScreen = screen },
-                    text = { Text(screen.label, style = MaterialTheme.typography.labelLarge) }
+                    text = { Text(screen.label, style = MaterialTheme.typography.labelLarge) },
+                    selectedContentColor = MaterialTheme.colorScheme.primary,
+                    unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }

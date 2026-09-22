@@ -70,7 +70,7 @@ fun AngleMeasureInput(
             InclinationIndicator(
                 angleDeg = liveAngle ?: 0f,
                 lineColor = MaterialTheme.colorScheme.primary,
-                referenceColor = MaterialTheme.colorScheme.outline,
+                referenceColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(width = 96.dp, height = 56.dp)
             )
         }
