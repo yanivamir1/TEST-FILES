@@ -28,7 +28,8 @@ import androidx.core.content.ContextCompat
 private enum class Screen(val label: String) {
     Jump("Jump"),
     Berm("Berm"),
-    RideLog("Ride Log")
+    RideLog("Ride Log"),
+    History("History")
 }
 
 class MainActivity : ComponentActivity() {
@@ -64,6 +65,7 @@ private fun AppRoot(
 ) {
     val context = LocalContext.current
     val liveSensors = rememberLiveSensors(sensorRepository, angleRepository)
+    val runStorage = remember { RunStorage(context.applicationContext) }
     var currentScreen by remember { mutableStateOf(Screen.Jump) }
     var lastJumpResult by remember { mutableStateOf<JumpScreenResult?>(null) }
     var landingAltitudeM by remember { mutableStateOf<Float?>(null) }
@@ -114,12 +116,14 @@ private fun AppRoot(
                 sensorRepository = sensorRepository,
                 locationRepository = locationRepository,
                 liveSensors = liveSensors,
+                runStorage = runStorage,
                 hasLocationPermission = hasLocationPermission,
                 onRequestPermission = {
                     permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
                 },
                 predictedJump = lastJumpResult
             )
+            Screen.History -> RunHistoryScreen(runStorage = runStorage)
         }
     }
 }
