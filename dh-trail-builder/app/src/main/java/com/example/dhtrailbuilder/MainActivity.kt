@@ -113,6 +113,7 @@ private fun AppRoot(
             Screen.RideLog -> TrailRunScreen(
                 sensorRepository = sensorRepository,
                 locationRepository = locationRepository,
+                liveSensors = liveSensors,
                 hasLocationPermission = hasLocationPermission,
                 onRequestPermission = {
                     permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)

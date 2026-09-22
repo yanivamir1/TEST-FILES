@@ -20,7 +20,8 @@ data class LocationSample(
     val speedKmh: Float?,
     val altitudeMeters: Float?,
     val latitude: Double? = null,
-    val longitude: Double? = null
+    val longitude: Double? = null,
+    val accuracyM: Float? = null
 )
 
 class LocationRepository(context: Context) {
@@ -28,6 +29,12 @@ class LocationRepository(context: Context) {
 
     val isGpsProviderAvailable: Boolean
         get() = locationManager.allProviders.contains(LocationManager.GPS_PROVIDER)
+
+    /** The provider existing is not the same as location being switched on. */
+    val isGpsEnabled: Boolean
+        get() = runCatching {
+            locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+        }.getOrDefault(false)
 
     @SuppressLint("MissingPermission")
     fun locationFlow(): Flow<LocationSample> = callbackFlow {
@@ -46,7 +53,8 @@ class LocationRepository(context: Context) {
                         speedKmh = speed,
                         altitudeMeters = altitude,
                         latitude = location.latitude,
-                        longitude = location.longitude
+                        longitude = location.longitude,
+                        accuracyM = if (location.hasAccuracy()) location.accuracy else null
                     )
                 )
             }

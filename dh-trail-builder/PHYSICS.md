@@ -165,6 +165,16 @@ takeoff/landing timestamps onto the nearest GPS samples to read off distance,
 altitude and speed. When a jump was also calculated on the Jump tab, the actual
 distance is shown next to the prediction.
 
+### Test mode (no GPS)
+
+The ride log also records without GPS at all: altitude comes from the barometer
+(sampled twice a second) and the jump detection runs exactly as it does outdoors,
+because it only needs the accelerometer. There is no speed and no distance in this
+mode - the chart's x axis becomes elapsed time instead of ground distance, and a
+detected jump reports its air time and height change but not how far it went. It
+exists so the free-fall detection can be checked indoors, off a step, without waiting
+for a GPS fix that a building will never give.
+
 **This is a heuristic, not a measurement.** It depends on the phone being mounted
 firmly to the bike (in a pocket it will pick up body movement instead of the bike's
 motion); the thresholds are tuned for a "normal" dirt-jump-sized hop and can miss a

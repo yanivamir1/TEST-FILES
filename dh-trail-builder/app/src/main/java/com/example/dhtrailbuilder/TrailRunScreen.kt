@@ -11,10 +11,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -22,21 +24,34 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import java.util.Locale
+import kotlin.math.abs
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
+/** speedKmh and cumulativeDistanceM are absent when recording without GPS. */
 data class RunSample(
     val timestampMs: Long,
-    val cumulativeDistanceM: Float,
-    val speedKmh: Float,
-    val altitudeM: Float
+    val elapsedSec: Float,
+    val altitudeM: Float,
+    val speedKmh: Float? = null,
+    val cumulativeDistanceM: Float? = null
 )
+
+private enum class RecordMode(val label: String) {
+    Gps("Ride (GPS)"),
+    NoGps("Test (no GPS)")
+}
 
 @Composable
 fun TrailRunScreen(
     sensorRepository: SensorRepository,
     locationRepository: LocationRepository,
+    liveSensors: LiveSensorState,
     hasLocationPermission: Boolean,
     onRequestPermission: () -> Unit,
     modifier: Modifier = Modifier,
@@ -44,34 +59,54 @@ fun TrailRunScreen(
 ) {
     val scope = rememberCoroutineScope()
     val samples = remember { mutableStateListOf<RunSample>() }
+    var mode by remember { mutableStateOf(RecordMode.Gps) }
     var isRecording by remember { mutableStateOf(false) }
-    var locationJob by remember { mutableStateOf<Job?>(null) }
-    var accelJob by remember { mutableStateOf<Job?>(null) }
+    var jobs by remember { mutableStateOf<List<Job>>(emptyList()) }
     var detectedJump by remember { mutableStateOf<JumpEvent?>(null) }
+    var lastFix by remember { mutableStateOf<LocationSample?>(null) }
+    var elapsedSec by remember { mutableStateOf(0) }
 
     DisposableEffect(Unit) {
-        onDispose {
-            locationJob?.cancel()
-            accelJob?.cancel()
+        onDispose { jobs.forEach { it.cancel() } }
+    }
+
+    LaunchedEffect(isRecording) {
+        if (!isRecording) return@LaunchedEffect
+        elapsedSec = 0
+        while (isActive) {
+            delay(1000)
+            elapsedSec += 1
         }
     }
 
     fun startRecording() {
         samples.clear()
         detectedJump = null
+        lastFix = null
         isRecording = true
+        val startedAt = System.currentTimeMillis()
 
-        var lastLat: Double? = null
-        var lastLon: Double? = null
-        var cumulativeDistance = 0f
+        val detector = JumpDetector()
+        val accelJob = scope.launch {
+            sensorRepository.accelerationMagnitudeFlow().collect { magnitude ->
+                val event = detector.onSample(magnitude, System.currentTimeMillis())
+                if (event != null) detectedJump = event
+            }
+        }
 
-        locationJob = scope.launch {
-            locationRepository.locationFlow().collect { sample ->
-                val speed = sample.speedKmh
-                val altitude = sample.altitudeMeters
-                val lat = sample.latitude
-                val lon = sample.longitude
-                if (speed != null && altitude != null && lat != null && lon != null) {
+        val recordJob = if (mode == RecordMode.Gps) {
+            scope.launch {
+                var lastLat: Double? = null
+                var lastLon: Double? = null
+                var cumulativeDistance = 0f
+
+                locationRepository.locationFlow().collect { fix ->
+                    lastFix = fix
+                    val lat = fix.latitude
+                    val lon = fix.longitude
+                    val altitude = fix.altitudeMeters
+                    if (lat == null || lon == null || altitude == null) return@collect
+
                     val prevLat = lastLat
                     val prevLon = lastLon
                     if (prevLat != null && prevLon != null) {
@@ -81,30 +116,44 @@ fun TrailRunScreen(
                     }
                     lastLat = lat
                     lastLon = lon
+
+                    val now = System.currentTimeMillis()
                     samples.add(
                         RunSample(
-                            timestampMs = System.currentTimeMillis(),
-                            cumulativeDistanceM = cumulativeDistance,
-                            speedKmh = speed,
-                            altitudeM = altitude
+                            timestampMs = now,
+                            elapsedSec = (now - startedAt) / 1000f,
+                            altitudeM = altitude,
+                            // A fix without a speed means standing still, not a useless fix.
+                            speedKmh = fix.speedKmh ?: 0f,
+                            cumulativeDistanceM = cumulativeDistance
                         )
                     )
                 }
             }
-        }
-
-        val detector = JumpDetector()
-        accelJob = scope.launch {
-            sensorRepository.accelerationMagnitudeFlow().collect { magnitude ->
-                val event = detector.onSample(magnitude, System.currentTimeMillis())
-                if (event != null) detectedJump = event
+        } else {
+            scope.launch {
+                while (isActive) {
+                    liveSensors.altitudeM?.let { altitude ->
+                        val now = System.currentTimeMillis()
+                        samples.add(
+                            RunSample(
+                                timestampMs = now,
+                                elapsedSec = (now - startedAt) / 1000f,
+                                altitudeM = altitude
+                            )
+                        )
+                    }
+                    delay(500)
+                }
             }
         }
+
+        jobs = listOf(accelJob, recordJob)
     }
 
     fun stopRecording() {
-        locationJob?.cancel()
-        accelJob?.cancel()
+        jobs.forEach { it.cancel() }
+        jobs = emptyList()
         isRecording = false
     }
 
@@ -112,121 +161,212 @@ fun TrailRunScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        when {
-            !hasLocationPermission -> SectionCard(
-                title = "Ride log",
-                subtitle = "Checks the calculated jump against a real run"
-            ) {
+        if (!hasLocationPermission && mode == RecordMode.Gps) {
+            SectionCard(title = "Ride log", subtitle = "Checks the calculated jump against a real run") {
                 Text(
-                    "Location permission is required to record a run.",
+                    "Location permission is required to record with GPS. You can still use " +
+                        "Test (no GPS) to check the jump detection indoors.",
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Button(onClick = onRequestPermission, modifier = Modifier.fillMaxWidth()) {
                     Text("Grant permission")
                 }
             }
+        }
 
-            !locationRepository.isGpsProviderAvailable -> NoticeCard(
-                "No GPS provider available on this device.",
-                isError = true
-            )
-
-            else -> {
-                SectionCard(
-                    title = "Ride log",
-                    subtitle = "Checks the calculated jump against a real run"
-                ) {
-                    Button(
-                        onClick = { if (isRecording) stopRecording() else startRecording() },
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text(if (isRecording) "Stop recording" else "Start recording") }
-
-                    Text(
-                        text = when {
-                            isRecording -> "Recording · ${samples.size} points"
-                            samples.isEmpty() ->
-                                "Waiting to start. Keep the phone on the bike for the whole run-in, jump and landing."
-                            else -> "Stopped · ${samples.size} points"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+        SectionCard(title = "Ride log", subtitle = "Checks the calculated jump against a real run") {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                RecordMode.entries.forEach { option ->
+                    FilterChip(
+                        selected = mode == option,
+                        onClick = { if (!isRecording) mode = option },
+                        label = { Text(option.label) },
+                        enabled = !isRecording
                     )
                 }
-
-                if (samples.isNotEmpty()) {
-                    RunStats(samples)
-
-                    val (takeoffMarker, landingMarker) = detectedJump?.let { event ->
-                        val takeoffSample = samples.minByOrNull { kotlin.math.abs(it.timestampMs - event.takeoffAtMs) }
-                        val landingSample = samples.minByOrNull { kotlin.math.abs(it.timestampMs - event.landingAtMs) }
-                        if (takeoffSample != null && landingSample != null) {
-                            JumpMarker(takeoffSample.cumulativeDistanceM, takeoffSample.altitudeM) to
-                                JumpMarker(landingSample.cumulativeDistanceM, landingSample.altitudeM)
-                        } else null to null
-                    } ?: (null to null)
-
-                    SectionCard(
-                        title = "Trail profile",
-                        subtitle = "Altitude over ground distance covered"
-                    ) {
-                        RideProfileChart(
-                            samples = samples,
-                            takeoff = takeoffMarker,
-                            landing = landingMarker,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(160.dp)
-                        )
-                        AxisLabels(
-                            minValue = samples.minOf { it.altitudeM },
-                            maxValue = samples.maxOf { it.altitudeM },
-                            unit = "m"
-                        )
-                    }
-
-                    if (!isRecording) {
-                        JumpComparisonCard(
-                            samples = samples,
-                            detectedJump = detectedJump,
-                            predictedJump = predictedJump
-                        )
-                    }
-                }
             }
+
+            Button(
+                onClick = { if (isRecording) stopRecording() else startRecording() },
+                enabled = mode == RecordMode.NoGps || hasLocationPermission,
+                modifier = Modifier.fillMaxWidth()
+            ) { Text(if (isRecording) "Stop recording" else "Start recording") }
+
+            RecordingStatus(
+                isRecording = isRecording,
+                mode = mode,
+                elapsedSec = elapsedSec,
+                sampleCount = samples.size,
+                lastFix = lastFix,
+                gpsEnabled = locationRepository.isGpsEnabled,
+                gpsAvailable = locationRepository.isGpsProviderAvailable,
+                hasBarometer = liveSensors.barometerAvailable
+            )
+        }
+
+        if (samples.size >= 2) {
+            val useDistance = mode == RecordMode.Gps
+            val points = samples.map {
+                (if (useDistance) it.cumulativeDistanceM ?: 0f else it.elapsedSec) to it.altitudeM
+            }
+            val takeoffSample = detectedJump?.let { nearestSample(samples, it.takeoffAtMs) }
+            val landingSample = detectedJump?.let { nearestSample(samples, it.landingAtMs) }
+
+            RunStats(samples, useDistance)
+
+            SectionCard(
+                title = "Trail profile",
+                subtitle = if (useDistance) "Altitude over ground distance" else "Altitude over time"
+            ) {
+                RideProfileChart(
+                    points = points,
+                    takeoff = takeoffSample?.let {
+                        JumpMarker(if (useDistance) it.cumulativeDistanceM ?: 0f else it.elapsedSec, it.altitudeM)
+                    },
+                    landing = landingSample?.let {
+                        JumpMarker(if (useDistance) it.cumulativeDistanceM ?: 0f else it.elapsedSec, it.altitudeM)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(150.dp)
+                )
+                AxisLabels(
+                    minValue = samples.minOf { it.altitudeM },
+                    maxValue = samples.maxOf { it.altitudeM },
+                    unit = "m"
+                )
+            }
+
+            if (!isRecording) {
+                JumpComparisonCard(
+                    takeoff = takeoffSample,
+                    landing = landingSample,
+                    detectedJump = detectedJump,
+                    predictedJump = predictedJump,
+                    useDistance = useDistance
+                )
+            }
+        }
+    }
+}
+
+private fun nearestSample(samples: List<RunSample>, atMs: Long): RunSample? =
+    samples.minByOrNull { abs(it.timestampMs - atMs) }
+
+private fun clockOf(seconds: Int): String =
+    String.format(Locale.US, "%02d:%02d", seconds / 60, seconds % 60)
+
+@Composable
+private fun RecordingStatus(
+    isRecording: Boolean,
+    mode: RecordMode,
+    elapsedSec: Int,
+    sampleCount: Int,
+    lastFix: LocationSample?,
+    gpsEnabled: Boolean,
+    gpsAvailable: Boolean,
+    hasBarometer: Boolean
+) {
+    val headline: String
+    val detail: String?
+
+    when {
+        !isRecording && sampleCount == 0 -> {
+            headline = "Ready"
+            detail = when (mode) {
+                RecordMode.Gps -> "Ride the whole run-in, jump and landing with the phone on the bike."
+                RecordMode.NoGps -> "No GPS needed - records altitude from the barometer and watches " +
+                    "for the airborne moment. Good for testing indoors."
+            }
+        }
+
+        !isRecording -> {
+            headline = "Stopped · $sampleCount points"
+            detail = null
+        }
+
+        mode == RecordMode.NoGps -> {
+            headline = "Recording without GPS · ${clockOf(elapsedSec)} · $sampleCount points"
+            detail = if (hasBarometer) null else "No barometer on this device - altitude will stay empty."
+        }
+
+        !gpsAvailable -> {
+            headline = "No GPS provider on this device"
+            detail = "Switch to Test (no GPS) to check the jump detection."
+        }
+
+        !gpsEnabled -> {
+            headline = "Location is switched off"
+            detail = "Turn location on in Settings, or switch to Test (no GPS)."
+        }
+
+        lastFix?.latitude == null -> {
+            headline = "Searching for GPS… ${clockOf(elapsedSec)}"
+            detail = "GPS needs a clear view of the sky - it will not get a fix indoors. " +
+                "Go outside, or switch to Test (no GPS)."
+        }
+
+        else -> {
+            headline = "Recording · ${clockOf(elapsedSec)} · $sampleCount points"
+            detail = lastFix?.accuracyM?.let { "GPS accuracy ±${formatValue(it, 0)} m" }
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            text = headline,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+        detail?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
 
 @Composable
 private fun JumpComparisonCard(
-    samples: List<RunSample>,
+    takeoff: RunSample?,
+    landing: RunSample?,
     detectedJump: JumpEvent?,
-    predictedJump: JumpScreenResult?
+    predictedJump: JumpScreenResult?,
+    useDistance: Boolean
 ) {
-    if (detectedJump == null) {
+    if (detectedJump == null || takeoff == null || landing == null) {
         NoticeCard(
-            "No jump detected this run. Ride the whole run-in, jump and landing with the " +
-                "phone mounted on the bike for it to catch the airborne moment."
+            "No jump detected in this recording. The phone has to be mounted on the bike (a " +
+                "pocket picks up your body, not the bike) and the hop has to be long enough to " +
+                "register as free-fall."
         )
         return
     }
 
-    val takeoffSample = samples.minByOrNull { kotlin.math.abs(it.timestampMs - detectedJump.takeoffAtMs) }
-    val landingSample = samples.minByOrNull { kotlin.math.abs(it.timestampMs - detectedJump.landingAtMs) }
-    if (takeoffSample == null || landingSample == null) return
-
-    val actualDistance = landingSample.cumulativeDistanceM - takeoffSample.cumulativeDistanceM
     val airTimeSec = (detectedJump.landingAtMs - detectedJump.takeoffAtMs) / 1000f
-    val landingSpeed = landingSample.speedKmh
 
+    if (!useDistance) {
+        ResultCard(
+            primaryLabel = "DETECTED JUMP",
+            primaryValue = formatValue(airTimeSec, 2),
+            primaryUnit = "s in the air",
+            secondary = listOf(
+                "Height change" to "${formatValue(landing.altitudeM - takeoff.altitudeM)} m"
+            )
+        )
+        return
+    }
+
+    val actualDistance = (landing.cumulativeDistanceM ?: 0f) - (takeoff.cumulativeDistanceM ?: 0f)
     val secondary = mutableListOf(
         "Air time" to "${formatValue(airTimeSec, 2)} s",
-        "Landing speed" to "${formatValue(landingSpeed)} km/h"
+        "Landing speed" to "${formatValue(landing.speedKmh ?: 0f)} km/h"
     )
-
     predictedJump?.let { predicted ->
         val delta = actualDistance - predicted.distanceM
         val sign = if (delta >= 0) "+" else ""
@@ -243,18 +383,32 @@ private fun JumpComparisonCard(
 }
 
 @Composable
-private fun RunStats(samples: List<RunSample>) {
-    val maxSpeed = samples.maxOf { it.speedKmh }
+private fun RunStats(samples: List<RunSample>, useDistance: Boolean) {
     val gain = samples.maxOf { it.altitudeM } - samples.minOf { it.altitudeM }
-    val distance = samples.last().cumulativeDistanceM
 
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        ReadoutTile(label = "TOP SPEED", value = formatValue(maxSpeed), unit = "km/h")
+        if (useDistance) {
+            ReadoutTile(
+                label = "TOP SPEED",
+                value = formatValue(samples.maxOf { it.speedKmh ?: 0f }),
+                unit = "km/h"
+            )
+            ReadoutTile(
+                label = "DISTANCE",
+                value = formatValue(samples.last().cumulativeDistanceM ?: 0f, 0),
+                unit = "m"
+            )
+        } else {
+            ReadoutTile(
+                label = "DURATION",
+                value = formatValue(samples.last().elapsedSec, 0),
+                unit = "s"
+            )
+        }
         ReadoutTile(label = "ELEVATION RANGE", value = formatValue(gain), unit = "m")
-        ReadoutTile(label = "DISTANCE", value = formatValue(distance, 0), unit = "m")
     }
 }
 

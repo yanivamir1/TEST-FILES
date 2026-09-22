@@ -11,20 +11,19 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.rememberTextMeasurer
 
-/** One point of a detected jump, mapped onto the ride profile's axes. */
-data class JumpMarker(val distanceM: Float, val altitudeM: Float)
+/** A point of a detected jump, in the same x-space as the chart's points. */
+data class JumpMarker(val x: Float, val altitudeM: Float)
 
 /**
- * The real-data counterpart to [TrailProfile]: altitude plotted against ground distance covered,
- * in the same visual language (filled trace, accent color, dashed flight-path overlay, circular
- * markers) - but traced from what actually happened on a recorded ride instead of an idealized
- * geometry. When a jump was detected, [takeoff] and [landing] draw the same dashed-arc-plus-marker
- * idiom the calculator diagrams use for the predicted trajectory.
+ * The real-data counterpart to [TrailProfile]: altitude plotted against whatever the screen
+ * chose for the x axis - ground distance when recording with GPS, elapsed time without - in
+ * the same visual language, with the detected jump drawn as a dashed flight path between
+ * takeoff and landing markers.
  */
 @OptIn(ExperimentalTextApi::class)
 @Composable
 fun RideProfileChart(
-    samples: List<RunSample>,
+    points: List<Pair<Float, Float>>,
     modifier: Modifier = Modifier,
     takeoff: JumpMarker? = null,
     landing: JumpMarker? = null
@@ -46,52 +45,54 @@ fun RideProfileChart(
             )
         }
 
-        if (samples.size < 2) return@Canvas
+        if (points.size < 2) return@Canvas
 
-        val minX = samples.first().cumulativeDistanceM
-        val maxX = samples.last().cumulativeDistanceM
-        val minY = samples.minOf { it.altitudeM }
-        val maxY = samples.maxOf { it.altitudeM }
+        val minX = points.first().first
+        val maxX = points.last().first
+        val minY = points.minOf { it.second }
+        val maxY = points.maxOf { it.second }
         val xRange = (maxX - minX).coerceAtLeast(0.001f)
         val yRange = (maxY - minY).coerceAtLeast(0.001f)
         val inset = size.height * 0.10f
 
-        fun toOffset(distanceM: Float, altitudeM: Float): Offset = Offset(
-            x = (distanceM - minX) / xRange * size.width,
-            y = size.height - inset - (altitudeM - minY) / yRange * (size.height - 2 * inset)
+        fun toOffset(x: Float, altitude: Float): Offset = Offset(
+            x = (x - minX) / xRange * size.width,
+            y = size.height - inset - (altitude - minY) / yRange * (size.height - 2 * inset)
         )
 
-        val points = samples.map { toOffset(it.cumulativeDistanceM, it.altitudeM) }
+        val plotted = points.map { toOffset(it.first, it.second) }
 
         val area = Path().apply {
-            moveTo(points.first().x, size.height)
-            points.forEach { lineTo(it.x, it.y) }
-            lineTo(points.last().x, size.height)
+            moveTo(plotted.first().x, size.height)
+            plotted.forEach { lineTo(it.x, it.y) }
+            lineTo(plotted.last().x, size.height)
             close()
         }
         drawPath(path = area, color = accent.copy(alpha = 0.14f))
 
-        for (i in 0 until points.size - 1) {
-            drawLine(color = accent, start = points[i], end = points[i + 1], strokeWidth = 5f)
+        for (i in 0 until plotted.size - 1) {
+            drawLine(color = accent, start = plotted[i], end = plotted[i + 1], strokeWidth = 5f)
         }
 
         if (takeoff != null && landing != null) {
-            val takeoffPoint = toOffset(takeoff.distanceM, takeoff.altitudeM)
-            val landingPoint = toOffset(landing.distanceM, landing.altitudeM)
+            val takeoffPoint = toOffset(takeoff.x, takeoff.altitudeM)
+            val landingPoint = toOffset(landing.x, landing.altitudeM)
 
             val flight = Path().apply {
                 moveTo(takeoffPoint.x, takeoffPoint.y)
-                val liftHeight = size.height * 0.12f
                 quadraticBezierTo(
                     (takeoffPoint.x + landingPoint.x) / 2f,
-                    minOf(takeoffPoint.y, landingPoint.y) - liftHeight,
+                    minOf(takeoffPoint.y, landingPoint.y) - size.height * 0.12f,
                     landingPoint.x, landingPoint.y
                 )
             }
             drawPath(
                 flight,
                 accent,
-                style = Stroke(width = 4f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 10f)))
+                style = Stroke(
+                    width = 4f,
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 10f))
+                )
             )
 
             drawMarker(measurer, takeoffPoint, "T", accent, onAccent)
