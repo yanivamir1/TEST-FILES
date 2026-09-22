@@ -45,7 +45,7 @@ fun JumpCalculatorScreen(
     Column(modifier = modifier.fillMaxSize()) {
         DiagramCard(
             instruction = activeStep.instruction,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
         ) {
             TrailProfile(
                 activeStep = activeStep,
@@ -55,7 +55,7 @@ fun JumpCalculatorScreen(
                 jumpDistanceM = landed?.distanceM,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(112.dp)
+                    .height(92.dp)
             )
         }
 
@@ -63,8 +63,8 @@ fun JumpCalculatorScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 12.dp, end = 12.dp, bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(start = 10.dp, end = 10.dp, bottom = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             SectionCard(
                 title = "Approach",

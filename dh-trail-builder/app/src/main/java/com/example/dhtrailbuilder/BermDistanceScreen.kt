@@ -44,14 +44,14 @@ fun BermDistanceScreen(
     Column(modifier = modifier.fillMaxSize()) {
         DiagramCard(
             instruction = "Capture at the landing, then at the berm - how much further you drop",
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
         ) {
             BermProfile(
                 dropToBermM = dropToBerm,
                 runOutM = (outcome as? Physics.BermResult.Distance)?.alongGroundM,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(112.dp)
+                    .height(92.dp)
             )
         }
 
@@ -59,8 +59,8 @@ fun BermDistanceScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 12.dp, end = 12.dp, bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(start = 10.dp, end = 10.dp, bottom = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             SectionCard(
                 title = "Entry",

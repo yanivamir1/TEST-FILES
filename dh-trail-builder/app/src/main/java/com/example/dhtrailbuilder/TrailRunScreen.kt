@@ -177,8 +177,8 @@ fun TrailRunScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         if (!hasLocationPermission && mode == RecordMode.Gps) {
             SectionCard(title = "Ride log", subtitle = "Checks the calculated jump against a real run") {
@@ -284,7 +284,7 @@ fun RunResultsSection(
                     scrubSample.altitudeM,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(150.dp)
+                    .height(130.dp)
             )
             AxisLabels(
                 minValue = samples.minOf { it.altitudeM },

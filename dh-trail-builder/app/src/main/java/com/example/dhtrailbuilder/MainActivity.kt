@@ -89,7 +89,11 @@ private fun AppRoot(
     }
 
     Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
-        LiveSensorBar(liveSensors)
+        LiveSensorBar(
+            liveSensors = liveSensors,
+            locationRepository = locationRepository,
+            hasLocationPermission = hasLocationPermission
+        )
 
         TabRow(selectedTabIndex = currentScreen.ordinal) {
             Screen.entries.forEach { screen ->
