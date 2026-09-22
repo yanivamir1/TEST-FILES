@@ -1,6 +1,7 @@
 package com.example.dhtrailbuilder
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -10,6 +11,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -131,29 +133,30 @@ fun JumpCalculatorScreen(
                 )
             }
 
-            Button(
-                onClick = {
-                    val startSpeedMs = (startSpeedText.toFloatOrNull() ?: 0f) / 3.6f
-                    val drop1 = dropToLip
-                    val angle = rampAngleDeg
-                    val drop2 = landingDrop
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Button(
+                    onClick = {
+                        val startSpeedMs = (startSpeedText.toFloatOrNull() ?: 0f) / 3.6f
+                        val drop1 = dropToLip
+                        val angle = rampAngleDeg
+                        val drop2 = landingDrop
 
-                    outcome = if (drop1 == null || angle == null || drop2 == null) {
-                        JumpOutcome.Problem("Fill in or measure every field to calculate.")
-                    } else {
-                        val result = Physics.computeJump(
-                            Physics.lipSpeed(startSpeedMs, drop1),
-                            angle,
-                            drop2
-                        )
-                        if (result is Physics.JumpResult.Landed) {
-                            onResult(JumpScreenResult(result.distanceM, result.landingSpeedMs))
+                        outcome = if (drop1 == null || angle == null || drop2 == null) {
+                            JumpOutcome.Problem("Fill in or measure every field to calculate.")
+                        } else {
+                            val result = Physics.computeJump(
+                                Physics.lipSpeed(startSpeedMs, drop1),
+                                angle,
+                                drop2
+                            )
+                            if (result is Physics.JumpResult.Landed) {
+                                onResult(JumpScreenResult(result.distanceM, result.landingSpeedMs))
+                            }
+                            JumpOutcome.Computed(result)
                         }
-                        JumpOutcome.Computed(result)
                     }
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("Calculate jump") }
+                ) { Text("Calculate jump") }
+            }
 
             when (val current = outcome) {
                 null -> Unit

@@ -13,24 +13,31 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import java.util.Locale
 
 fun formatValue(value: Float, decimals: Int = 1): String =
@@ -79,9 +86,13 @@ private fun DrawScope.drawGlowOrb(
     )
 }
 
-private val GlassBorder = Color(0x12FFFFFF)
+internal val GlassBorder = Color(0x12FFFFFF)
 
-/** Glass card: near-black fill, hairline border. Selected state gets a bright cream outline. */
+/**
+ * Glass row group: near-black fill, hairline border, one small caps title. Deliberately thin -
+ * a line or two of content, not a padded block - so a screen full of these still reads as one
+ * clean list rather than a stack of cards.
+ */
 @Composable
 fun SectionCard(
     title: String,
@@ -105,24 +116,15 @@ fun SectionCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    text = title.uppercase(Locale.US),
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                subtitle?.let {
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
+            Text(
+                text = title.uppercase(Locale.US),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             content()
         }
     }
@@ -265,6 +267,11 @@ fun NoticeCard(text: String, modifier: Modifier = Modifier, isError: Boolean = f
     }
 }
 
+/**
+ * One compact row: a muted label on the left, an editable number tight against its unit on
+ * the right. No boxed outline, no floating label - just a hairline underneath, the way a
+ * clean native settings row reads rather than a form field.
+ */
 @Composable
 fun NumberField(
     label: String,
@@ -275,20 +282,100 @@ fun NumberField(
     supportingText: String? = null,
     isError: Boolean = false
 ) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = { Text(if (unit != null) "$label ($unit)" else label) },
-        supportingText = supportingText?.let { { Text(it) } },
-        isError = isError,
-        singleLine = true,
-        shape = MaterialTheme.shapes.small,
-        colors = OutlinedTextFieldDefaults.colors(
-            unfocusedBorderColor = GlassBorder,
-            unfocusedContainerColor = Color.White.copy(alpha = 0.02f),
-            focusedContainerColor = Color.White.copy(alpha = 0.02f)
-        ),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-        modifier = modifier.fillMaxWidth()
-    )
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f)
+            )
+            InlineValueField(
+                value = value,
+                onValueChange = onValueChange,
+                unit = unit,
+                isError = isError
+            )
+        }
+        if (!supportingText.isNullOrBlank()) {
+            Text(
+                text = supportingText,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        }
+    }
 }
+
+/** Just the editable number + unit, for rows that already carry their own label (capture rows). */
+@Composable
+fun InlineValueField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    unit: String? = null,
+    isError: Boolean = false,
+    width: Dp = 68.dp
+) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            textStyle = LocalTextStyle.current.copy(
+                color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.End
+            ),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            modifier = modifier.width(width)
+        )
+        unit?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+/** Small round A/B/∠-style capture button: outline when empty, solid cream once captured. */
+@Composable
+fun CaptureChip(
+    label: String,
+    captured: Boolean,
+    enabled: Boolean,
+    onCapture: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val fillColor = if (captured) MaterialTheme.colorScheme.primary else Color.Transparent
+    val foreground = if (captured) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+    val borderColor = if (captured) MaterialTheme.colorScheme.primary else GlassBorder
+
+    Box(
+        modifier = modifier
+            .size(32.dp)
+            .clip(CircleShape)
+            .background(fillColor)
+            .border(width = 1.dp, color = borderColor, shape = CircleShape)
+            .clickable(enabled = enabled) { onCapture() },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = if (enabled) foreground else foreground.copy(alpha = 0.4f)
+        )
+    }
+}
+

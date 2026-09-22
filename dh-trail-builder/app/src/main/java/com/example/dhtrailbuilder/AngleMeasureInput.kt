@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -18,16 +17,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * Ramp-angle input driven by the live tilt sensor. The current angle is shown continuously
- * with a visual inclination indicator, so the phone can be aimed against the ramp face and
- * watched before the value is captured.
+ * Ramp-angle input driven by the live tilt sensor, as one compact row: a capture chip, the
+ * live angle, a small inclination line, and the editable value.
  */
 @Composable
 fun AngleMeasureInput(
@@ -40,64 +37,57 @@ fun AngleMeasureInput(
     onInteract: () -> Unit = {}
 ) {
     var textValue by remember { mutableStateOf(valueDeg?.let { formatValue(it) } ?: "") }
+    var captured by remember { mutableStateOf(valueDeg != null) }
     val liveAngle = liveSensors.lengthTiltDeg?.let { abs(it) }
 
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
             text = label,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        hint?.let {
-            Text(
-                text = it,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            ReadoutTile(
-                label = "LIVE ANGLE",
-                value = liveAngle?.let { formatValue(it) } ?: "—",
-                unit = "°",
-                emphasis = true
+            CaptureChip(
+                label = "∠",
+                captured = captured,
+                enabled = liveAngle != null,
+                onCapture = {
+                    onInteract()
+                    liveAngle?.let {
+                        textValue = formatValue(it)
+                        onValueChange(it)
+                        captured = true
+                    }
+                }
             )
             InclinationIndicator(
                 angleDeg = liveAngle ?: 0f,
                 lineColor = MaterialTheme.colorScheme.primary,
                 referenceColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(width = 96.dp, height = 56.dp)
+                modifier = Modifier.size(width = 44.dp, height = 28.dp)
+            )
+            Text(
+                text = liveAngle?.let { "${formatValue(it)}° live" } ?: "no reading",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f)
+            )
+            InlineValueField(
+                value = textValue,
+                onValueChange = {
+                    onInteract()
+                    textValue = it
+                    onValueChange(it.toFloatOrNull())
+                    captured = it.isNotBlank()
+                },
+                unit = "°"
             )
         }
-
-        Button(
-            onClick = {
-                onInteract()
-                liveAngle?.let {
-                    textValue = formatValue(it)
-                    onValueChange(it)
-                }
-            },
-            enabled = liveAngle != null,
-            modifier = Modifier.fillMaxWidth()
-        ) { Text("Capture angle") }
-
-        NumberField(
-            label = "Ramp angle",
-            value = textValue,
-            onValueChange = {
-                onInteract()
-                textValue = it
-                onValueChange(it.toFloatOrNull())
-            },
-            unit = "°",
-            supportingText = "Lay the phone on the ramp face, then capture - or type it in"
-        )
     }
 }
 
@@ -117,7 +107,7 @@ private fun InclinationIndicator(
             color = referenceColor,
             start = pivot,
             end = Offset(pivot.x + length, pivot.y),
-            strokeWidth = 3f
+            strokeWidth = 2f
         )
 
         val rad = Math.toRadians(angleDeg.toDouble())
@@ -125,6 +115,6 @@ private fun InclinationIndicator(
             x = pivot.x + (length * cos(rad)).toFloat(),
             y = pivot.y - (length * sin(rad)).toFloat()
         )
-        drawLine(color = lineColor, start = pivot, end = end, strokeWidth = 7f)
+        drawLine(color = lineColor, start = pivot, end = end, strokeWidth = 5f)
     }
 }

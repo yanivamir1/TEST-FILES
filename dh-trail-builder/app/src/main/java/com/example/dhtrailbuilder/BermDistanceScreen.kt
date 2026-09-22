@@ -1,6 +1,7 @@
 package com.example.dhtrailbuilder
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -152,38 +153,39 @@ fun BermDistanceScreen(
                 }
             }
 
-            Button(
-                onClick = {
-                    val landingSpeed = landingSpeedText.toFloatOrNull()
-                    val targetSpeed = targetSpeedText.toFloatOrNull()
-                    val drop = dropToBerm
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Button(
+                    onClick = {
+                        val landingSpeed = landingSpeedText.toFloatOrNull()
+                        val targetSpeed = targetSpeedText.toFloatOrNull()
+                        val drop = dropToBerm
 
-                    when {
-                        landingSpeed == null -> {
-                            inputProblem = "Enter the landing speed, or calculate a jump first."
-                            outcome = null
-                        }
-                        targetSpeed == null -> {
-                            inputProblem = "Enter the speed you want to enter the berm at."
-                            outcome = null
-                        }
-                        drop == null -> {
-                            inputProblem = "Measure or type the drop from the landing to the berm."
-                            outcome = null
-                        }
-                        else -> {
-                            inputProblem = null
-                            outcome = Physics.bermRunOut(
-                                landingSpeedMs = landingSpeed / 3.6f,
-                                targetEntrySpeedMs = targetSpeed / 3.6f,
-                                dropToBermM = drop,
-                                mu = selectedFriction.mu(braking)
-                            )
+                        when {
+                            landingSpeed == null -> {
+                                inputProblem = "Enter the landing speed, or calculate a jump first."
+                                outcome = null
+                            }
+                            targetSpeed == null -> {
+                                inputProblem = "Enter the speed you want to enter the berm at."
+                                outcome = null
+                            }
+                            drop == null -> {
+                                inputProblem = "Measure or type the drop from the landing to the berm."
+                                outcome = null
+                            }
+                            else -> {
+                                inputProblem = null
+                                outcome = Physics.bermRunOut(
+                                    landingSpeedMs = landingSpeed / 3.6f,
+                                    targetEntrySpeedMs = targetSpeed / 3.6f,
+                                    dropToBermM = drop,
+                                    mu = selectedFriction.mu(braking)
+                                )
+                            }
                         }
                     }
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("Calculate run-out") }
+                ) { Text("Calculate run-out") }
+            }
 
             inputProblem?.let { NoticeCard(it, isError = true) }
 
