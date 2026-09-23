@@ -280,9 +280,10 @@ fun NoticeCard(text: String, modifier: Modifier = Modifier, isError: Boolean = f
 }
 
 /**
- * One compact row: a muted label on the left, an editable number tight against its unit on
- * the right. No boxed outline, no floating label - just a hairline underneath, the way a
- * clean native settings row reads rather than a form field.
+ * A muted label, then either a compact label-left/value-right row (no `step`), or - when a
+ * step is given - the label on its own line above a full-width row with a large +/- button
+ * pinned to each edge and the value centered between them, as far apart as the row allows so
+ * a miss-tap on one doesn't land on the other.
  */
 @Composable
 fun NumberField(
@@ -292,25 +293,44 @@ fun NumberField(
     modifier: Modifier = Modifier,
     unit: String? = null,
     supportingText: String? = null,
-    isError: Boolean = false
+    isError: Boolean = false,
+    step: Float? = null,
+    stepDecimals: Int = 1
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        if (step != null) {
             Text(
                 text = label,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f)
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            InlineValueField(
+            SteppedValueRow(
                 value = value,
                 onValueChange = onValueChange,
                 unit = unit,
-                isError = isError
+                isError = isError,
+                step = step,
+                decimals = stepDecimals,
+                modifier = Modifier.padding(top = 6.dp)
             )
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+                InlineValueField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    unit = unit,
+                    isError = isError
+                )
+            }
         }
         if (!supportingText.isNullOrBlank()) {
             Text(
@@ -357,6 +377,61 @@ fun InlineValueField(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+    }
+}
+
+/**
+ * A large +/- pair pinned to the edges of the row with the value centered between them - the
+ * distance itself is the mis-tap guard, on top of each button's own 44dp size. Typing on the
+ * keyboard still works; the buttons just nudge the value by `step` per press.
+ */
+@Composable
+fun SteppedValueRow(
+    value: String,
+    onValueChange: (String) -> Unit,
+    step: Float,
+    modifier: Modifier = Modifier,
+    unit: String? = null,
+    isError: Boolean = false,
+    decimals: Int = 1
+) {
+    fun nudge(sign: Float) {
+        val current = value.toFloatOrNull() ?: 0f
+        onValueChange(formatValue(current + sign * step, decimals))
+    }
+
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        StepButton(symbol = "−", onClick = { nudge(-1f) })
+        InlineValueField(
+            value = value,
+            onValueChange = onValueChange,
+            unit = unit,
+            isError = isError
+        )
+        StepButton(symbol = "+", onClick = { nudge(1f) })
+    }
+}
+
+@Composable
+private fun StepButton(symbol: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .border(width = 1.dp, color = GlassBorder, shape = CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = symbol,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }
 

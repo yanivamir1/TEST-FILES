@@ -52,7 +52,7 @@ fun ElevationDeltaInput(
         }
     }
 
-    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             text = label,
             style = MaterialTheme.typography.bodyMedium,
@@ -93,15 +93,17 @@ fun ElevationDeltaInput(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f)
             )
-            InlineValueField(
-                value = textValue,
-                onValueChange = {
-                    onInteract()
-                    textValue = it
-                    onValueChange(it.toFloatOrNull())
-                },
-                unit = "m"
-            )
         }
+
+        SteppedValueRow(
+            value = textValue,
+            onValueChange = {
+                onInteract()
+                textValue = it
+                onValueChange(it.toFloatOrNull())
+            },
+            step = 0.5f,
+            unit = "m"
+        )
     }
 }

@@ -40,7 +40,7 @@ fun AngleMeasureInput(
     var captured by remember { mutableStateOf(valueDeg != null) }
     val liveAngle = liveSensors.lengthTiltDeg?.let { abs(it) }
 
-    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             text = label,
             style = MaterialTheme.typography.bodyMedium,
@@ -77,17 +77,20 @@ fun AngleMeasureInput(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f)
             )
-            InlineValueField(
-                value = textValue,
-                onValueChange = {
-                    onInteract()
-                    textValue = it
-                    onValueChange(it.toFloatOrNull())
-                    captured = it.isNotBlank()
-                },
-                unit = "°"
-            )
         }
+
+        SteppedValueRow(
+            value = textValue,
+            onValueChange = {
+                onInteract()
+                textValue = it
+                onValueChange(it.toFloatOrNull())
+                captured = it.isNotBlank()
+            },
+            step = 1f,
+            unit = "°",
+            decimals = 0
+        )
     }
 }
 

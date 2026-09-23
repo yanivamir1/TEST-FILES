@@ -197,7 +197,8 @@ private fun AltitudeCalibrationDialog(
                     label = "Known altitude",
                     value = input,
                     onValueChange = { input = it },
-                    unit = "m"
+                    unit = "m",
+                    step = 0.5f
                 )
             }
         },
