@@ -1,7 +1,6 @@
 package com.example.dhtrailbuilder
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -38,8 +37,22 @@ fun BermDistanceScreen(
     var targetSpeedText by remember { mutableStateOf("") }
     var selectedFriction by remember { mutableStateOf(FrictionPreset.PACKED_TRAIL) }
     var braking by remember { mutableStateOf(true) }
-    var outcome by remember { mutableStateOf<Physics.BermResult?>(null) }
-    var inputProblem by remember { mutableStateOf<String?>(null) }
+
+    // Recomputed on every recomposition, so the result appears the moment all three inputs
+    // are present and updates immediately on any later edit - no calculate button.
+    val landingSpeed = landingSpeedText.toFloatOrNull()
+    val targetSpeed = targetSpeedText.toFloatOrNull()
+    val drop = dropToBerm
+    val outcome: Physics.BermResult? = if (landingSpeed != null && targetSpeed != null && drop != null) {
+        Physics.bermRunOut(
+            landingSpeedMs = landingSpeed / 3.6f,
+            targetEntrySpeedMs = targetSpeed / 3.6f,
+            dropToBermM = drop,
+            mu = selectedFriction.mu(braking)
+        )
+    } else {
+        null
+    }
 
     Column(modifier = modifier.fillMaxSize()) {
         DiagramCard(
@@ -153,43 +166,6 @@ fun BermDistanceScreen(
                     }
                 }
             }
-
-            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                PrimaryActionButton(
-                    text = "Calculate run-out",
-                    onClick = {
-                        val landingSpeed = landingSpeedText.toFloatOrNull()
-                        val targetSpeed = targetSpeedText.toFloatOrNull()
-                        val drop = dropToBerm
-
-                        when {
-                            landingSpeed == null -> {
-                                inputProblem = "Enter the landing speed, or calculate a jump first."
-                                outcome = null
-                            }
-                            targetSpeed == null -> {
-                                inputProblem = "Enter the speed you want to enter the berm at."
-                                outcome = null
-                            }
-                            drop == null -> {
-                                inputProblem = "Measure or type the drop from the landing to the berm."
-                                outcome = null
-                            }
-                            else -> {
-                                inputProblem = null
-                                outcome = Physics.bermRunOut(
-                                    landingSpeedMs = landingSpeed / 3.6f,
-                                    targetEntrySpeedMs = targetSpeed / 3.6f,
-                                    dropToBermM = drop,
-                                    mu = selectedFriction.mu(braking)
-                                )
-                            }
-                        }
-                    }
-                )
-            }
-
-            inputProblem?.let { NoticeCard(it, isError = true) }
 
             when (val current = outcome) {
                 null -> Unit

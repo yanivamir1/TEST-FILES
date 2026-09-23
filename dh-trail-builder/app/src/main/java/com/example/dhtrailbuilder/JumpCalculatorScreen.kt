@@ -1,7 +1,6 @@
 package com.example.dhtrailbuilder
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -9,9 +8,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Text
-import androidx.compose.ui.Alignment
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -20,11 +18,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 data class JumpScreenResult(val distanceM: Float, val landingSpeedMs: Float)
-
-private sealed interface JumpOutcome {
-    data class Computed(val result: Physics.JumpResult) : JumpOutcome
-    data class Problem(val message: String) : JumpOutcome
-}
 
 @Composable
 fun JumpCalculatorScreen(
@@ -39,9 +32,23 @@ fun JumpCalculatorScreen(
     var landingDrop by remember { mutableStateOf<Float?>(null) }
     var lipAltitudeM by remember { mutableStateOf<Float?>(null) }
     var activeStep by remember { mutableStateOf(TrailStep.RollIn) }
-    var outcome by remember { mutableStateOf<JumpOutcome?>(null) }
 
-    val landed = (outcome as? JumpOutcome.Computed)?.result as? Physics.JumpResult.Landed
+    // Recomputed on every recomposition, so as soon as the last field is filled the result
+    // appears on its own, and any later edit updates it immediately - no calculate button.
+    val drop1 = dropToLip
+    val angle = rampAngleDeg
+    val drop2 = landingDrop
+    val result: Physics.JumpResult? = if (drop1 != null && angle != null && drop2 != null) {
+        val startSpeedMs = (startSpeedText.toFloatOrNull() ?: 0f) / 3.6f
+        Physics.computeJump(Physics.lipSpeed(startSpeedMs, drop1), angle, drop2)
+    } else {
+        null
+    }
+    val landed = result as? Physics.JumpResult.Landed
+
+    LaunchedEffect(landed) {
+        landed?.let { onResult(JumpScreenResult(it.distanceM, it.landingSpeedMs)) }
+    }
 
     Column(modifier = modifier.fillMaxSize()) {
         DiagramCard(
@@ -136,55 +143,26 @@ fun JumpCalculatorScreen(
                 )
             }
 
-            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                PrimaryActionButton(
-                    text = "Calculate jump",
-                    onClick = {
-                        val startSpeedMs = (startSpeedText.toFloatOrNull() ?: 0f) / 3.6f
-                        val drop1 = dropToLip
-                        val angle = rampAngleDeg
-                        val drop2 = landingDrop
-
-                        outcome = if (drop1 == null || angle == null || drop2 == null) {
-                            JumpOutcome.Problem("Fill in or measure every field to calculate.")
-                        } else {
-                            val result = Physics.computeJump(
-                                Physics.lipSpeed(startSpeedMs, drop1),
-                                angle,
-                                drop2
-                            )
-                            if (result is Physics.JumpResult.Landed) {
-                                onResult(JumpScreenResult(result.distanceM, result.landingSpeedMs))
-                            }
-                            JumpOutcome.Computed(result)
-                        }
-                    }
-                )
-            }
-
-            when (val current = outcome) {
+            when (result) {
                 null -> Unit
-                is JumpOutcome.Problem -> NoticeCard(current.message, isError = true)
-                is JumpOutcome.Computed -> when (val result = current.result) {
-                    is Physics.JumpResult.ShortOfLanding -> NoticeCard(
-                        "You do not clear this step-up. The arc peaks " +
-                            "${formatValue(result.peakAboveLipM)} m above the lip, but the landing " +
-                            "is ${formatValue(result.neededAboveLipM)} m above it. More speed into " +
-                            "the lip or a steeper ramp.",
-                        isError = true
-                    )
+                is Physics.JumpResult.ShortOfLanding -> NoticeCard(
+                    "You do not clear this step-up. The arc peaks " +
+                        "${formatValue(result.peakAboveLipM)} m above the lip, but the landing " +
+                        "is ${formatValue(result.neededAboveLipM)} m above it. More speed into " +
+                        "the lip or a steeper ramp.",
+                    isError = true
+                )
 
-                    is Physics.JumpResult.Landed -> ResultCard(
-                        primaryLabel = "JUMP DISTANCE",
-                        primaryValue = formatValue(result.distanceM),
-                        primaryUnit = "m",
-                        secondary = listOf(
-                            "Lip speed" to "${formatValue(result.lipSpeedMs * 3.6f)} km/h",
-                            "Landing speed" to "${formatValue(result.landingSpeedMs * 3.6f)} km/h",
-                            "Air time" to "${formatValue(result.airTimeSec, 2)} s"
-                        )
+                is Physics.JumpResult.Landed -> ResultCard(
+                    primaryLabel = "JUMP DISTANCE",
+                    primaryValue = formatValue(result.distanceM),
+                    primaryUnit = "m",
+                    secondary = listOf(
+                        "Lip speed" to "${formatValue(result.lipSpeedMs * 3.6f)} km/h",
+                        "Landing speed" to "${formatValue(result.landingSpeedMs * 3.6f)} km/h",
+                        "Air time" to "${formatValue(result.airTimeSec, 2)} s"
                     )
-                }
+                )
             }
         }
     }
