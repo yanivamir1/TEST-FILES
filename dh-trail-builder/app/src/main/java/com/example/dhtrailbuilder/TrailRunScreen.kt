@@ -32,6 +32,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -65,8 +66,29 @@ fun TrailRunScreen(
     var elapsedSec by remember { mutableStateOf(0) }
     var recordingStartedAtMs by remember { mutableStateOf(0L) }
 
+    // The speedometer: live even before recording starts, independent of the saved run.
+    var liveSpeedKmh by remember { mutableStateOf<Float?>(null) }
+    var speedWindow by remember { mutableStateOf<List<Pair<Long, Float>>>(emptyList()) }
+    var speedLog by remember { mutableStateOf<List<Float>>(emptyList()) }
+
+    fun trackSpeed(speedKmh: Float) {
+        val now = System.currentTimeMillis()
+        liveSpeedKmh = speedKmh
+        speedWindow = (speedWindow + (now to speedKmh)).filter { now - it.first <= 30_000L }
+        speedLog = (listOf(speedKmh) + speedLog).take(10)
+    }
+
     DisposableEffect(Unit) {
         onDispose { jobs.forEach { it.cancel() } }
+    }
+
+    // Ambient speed reading for the speedometer when nothing is being recorded - recording
+    // itself feeds trackSpeed() from its own GPS collection below instead of running a second.
+    LaunchedEffect(isRecording, hasLocationPermission) {
+        if (isRecording || !hasLocationPermission) return@LaunchedEffect
+        locationRepository.locationFlow()
+            .catch { }
+            .collect { fix -> fix.speedKmh?.let { trackSpeed(it) } }
     }
 
     LaunchedEffect(isRecording) {
@@ -121,13 +143,15 @@ fun TrailRunScreen(
                     lastLon = lon
 
                     val now = System.currentTimeMillis()
+                    // A fix without a speed means standing still, not a useless fix.
+                    val speed = fix.speedKmh ?: 0f
+                    trackSpeed(speed)
                     samples.add(
                         RunSample(
                             timestampMs = now,
                             elapsedSec = (now - startedAt) / 1000f,
                             altitudeM = altitude,
-                            // A fix without a speed means standing still, not a useless fix.
-                            speedKmh = fix.speedKmh ?: 0f,
+                            speedKmh = speed,
                             cumulativeDistanceM = cumulativeDistance
                         )
                     )
@@ -179,6 +203,13 @@ fun TrailRunScreen(
             .padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        LiveSpeedCard(
+            currentKmh = liveSpeedKmh,
+            maxKmh30s = speedWindow.maxOfOrNull { it.second } ?: 0f,
+            readings = speedLog,
+            showLog = !isRecording
+        )
+
         if (!hasLocationPermission && mode == RecordMode.Gps) {
             SectionCard(title = "Ride log", subtitle = "Checks the calculated jump against a real run") {
                 Text(
@@ -311,6 +342,54 @@ fun RunResultsSection(
                 predictedDistanceM = predictedDistanceM,
                 useDistance = useDistance
             )
+        }
+    }
+}
+
+/**
+ * Live speed, always on regardless of recording: current reading, the fastest point in the
+ * last 30 seconds, and a rolling log of the last 10 readings (oldest drops off as a new one
+ * comes in) - hidden once a recording is actually running so the card stays out of the way.
+ */
+@Composable
+private fun LiveSpeedCard(
+    currentKmh: Float?,
+    maxKmh30s: Float,
+    readings: List<Float>,
+    showLog: Boolean
+) {
+    SectionCard(title = "Live speed", subtitle = "Works even before you start recording") {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(28.dp)
+        ) {
+            ReadoutTile(
+                label = "SPEED",
+                value = currentKmh?.let { formatValue(it, 0) } ?: "—",
+                unit = "km/h"
+            )
+            ReadoutTile(
+                label = "MAX 30s",
+                value = formatValue(maxKmh30s, 0),
+                unit = "km/h"
+            )
+        }
+
+        if (showLog && readings.isNotEmpty()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 2.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                readings.forEach { reading ->
+                    Text(
+                        text = "${formatValue(reading, 0)} km/h",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
     }
 }
