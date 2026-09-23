@@ -15,9 +15,26 @@ android {
         versionName = "1.0"
     }
 
+    // CI runners are ephemeral, so the SDK's auto-generated ~/.android/debug.keystore is
+    // different on every build - installing a newer APK over an older one then fails with
+    // "package conflicts with an existing package" (signatures don't match). Signing every
+    // debug build with this committed, fixed-password keystore instead keeps the signature
+    // stable across builds, so installing an update over a previous install just works.
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("../debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+        }
+        debug {
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
