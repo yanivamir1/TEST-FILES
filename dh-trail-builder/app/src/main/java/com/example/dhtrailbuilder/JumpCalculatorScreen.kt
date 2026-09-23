@@ -89,6 +89,8 @@ fun JumpCalculatorScreen(
                     onInteract = { activeStep = TrailStep.RollIn },
                     pointALabel = "start",
                     pointBLabel = "lip",
+                    letterA = "A",
+                    letterB = "B",
                     onPointBCaptured = { lipAltitudeM = it }
                 )
             }
@@ -129,6 +131,8 @@ fun JumpCalculatorScreen(
                     presetPointACaption = "lip, set",
                     pointALabel = "lip",
                     pointBLabel = "landing",
+                    letterA = "B",
+                    letterB = "C",
                     onPointBCaptured = onLandingAltitudeCaptured
                 )
             }

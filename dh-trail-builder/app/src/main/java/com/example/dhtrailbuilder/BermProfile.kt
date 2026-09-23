@@ -24,6 +24,7 @@ fun BermProfile(
 ) {
     val measurer = androidx.compose.ui.text.rememberTextMeasurer()
     val accent = MaterialTheme.colorScheme.primary
+    val onAccent = MaterialTheme.colorScheme.onPrimary
     val dim = MaterialTheme.colorScheme.onSurfaceVariant
     val caption = MaterialTheme.colorScheme.onSurfaceVariant
 
@@ -63,11 +64,9 @@ fun BermProfile(
             )
         }
 
-        drawCircle(accent, 7f, landing)
-        drawCircle(dim, 7f, bermTop, style = Stroke(width = 2.5f))
-
-        drawLabel(measurer, "landing", Offset(landing.x - 6f, landing.y - 30f), caption, 10.sp)
-        drawLabel(measurer, "berm", Offset(bermTop.x - 26f, bermTop.y - 30f), caption, 10.sp)
+        drawMarker(measurer, landing, "C", accent, onAccent, 10f)
+        drawCircle(dim, 10f, bermTop, style = Stroke(width = 2.5f))
+        drawLabel(measurer, "D", Offset(bermTop.x - 4f, bermTop.y - 6f), dim, 11.sp)
 
         // The unknown: how much run-out it takes to get down to the berm speed.
         val y = size.height * 0.94f

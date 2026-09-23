@@ -28,10 +28,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.catch
+
+private enum class GpsStatus { OFF, SEARCHING, FIXED }
+
+/** A fix older than this reads as "lost" again, same as never having had one. */
+private const val FIX_STALE_MS = 12_000L
 
 /**
  * One thin line of live values, always on screen on every tab: altitude above sea level, the
- * phone's tilt along its length, and a persistent GPS status dot. Tapping the altitude opens
+ * phone's tilt along its length, and a persistent GPS status dot - grey when off, red while it
+ * has no fix (indoors, no sky view), green once it has a recent one. Tapping the altitude opens
  * calibration.
  */
 @Composable
@@ -43,6 +50,10 @@ fun LiveSensorBar(
 ) {
     var showCalibration by remember { mutableStateOf(false) }
     var gpsEnabled by remember { mutableStateOf(locationRepository.isGpsEnabled) }
+    var lastFixAtMs by remember { mutableStateOf<Long?>(null) }
+    var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
+
+    val available = hasLocationPermission && locationRepository.isGpsProviderAvailable && gpsEnabled
 
     // Location can be toggled from outside the app (quick settings) at any time, so this is
     // polled rather than read once - cheap, since isGpsEnabled is just a settings lookup.
@@ -51,6 +62,35 @@ fun LiveSensorBar(
             gpsEnabled = locationRepository.isGpsEnabled
             delay(3000)
         }
+    }
+
+    // A light-weight listener purely for the status dot: is a fix actually coming in right now,
+    // or is the phone just sitting there with GPS "on" but no sky view (indoors)?
+    LaunchedEffect(available) {
+        if (!available) {
+            lastFixAtMs = null
+            return@LaunchedEffect
+        }
+        locationRepository.locationFlow()
+            .catch { }
+            .collect { sample ->
+                if (sample.latitude != null && sample.longitude != null) {
+                    lastFixAtMs = System.currentTimeMillis()
+                }
+            }
+    }
+
+    LaunchedEffect(available) {
+        while (true) {
+            nowMs = System.currentTimeMillis()
+            delay(2000)
+        }
+    }
+
+    val status = when {
+        !available -> GpsStatus.OFF
+        lastFixAtMs != null && nowMs - lastFixAtMs!! < FIX_STALE_MS -> GpsStatus.FIXED
+        else -> GpsStatus.SEARCHING
     }
 
     Row(
@@ -68,7 +108,8 @@ fun LiveSensorBar(
         Text(
             text = altitudeText(liveSensors),
             style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
         )
         Text(
             text = if (liveSensors.isCalibrated) "CAL" else "~",
@@ -79,18 +120,15 @@ fun LiveSensorBar(
         Text(
             text = tiltText(liveSensors),
             style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
         )
 
         Row(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            GpsDot(
-                enabled = hasLocationPermission &&
-                    locationRepository.isGpsProviderAvailable &&
-                    gpsEnabled
-            )
+            GpsDot(status = status)
             Text(
                 text = "GPS",
                 style = MaterialTheme.typography.labelSmall,
@@ -108,8 +146,12 @@ fun LiveSensorBar(
 }
 
 @Composable
-private fun GpsDot(enabled: Boolean) {
-    val color = if (enabled) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant
+private fun GpsDot(status: GpsStatus) {
+    val color = when (status) {
+        GpsStatus.FIXED -> MaterialTheme.colorScheme.secondary
+        GpsStatus.SEARCHING -> MaterialTheme.colorScheme.error
+        GpsStatus.OFF -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
     Box(
         modifier = Modifier
             .size(7.dp)

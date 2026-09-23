@@ -56,6 +56,7 @@ fun TrailProfile(
 ) {
     val measurer = rememberTextMeasurer()
     val accent = MaterialTheme.colorScheme.primary
+    val onAccent = MaterialTheme.colorScheme.onPrimary
     val dim = MaterialTheme.colorScheme.onSurfaceVariant
     val caption = MaterialTheme.colorScheme.onSurfaceVariant
 
@@ -110,9 +111,12 @@ fun TrailProfile(
             )
         }
 
-        drawDot(start, dropToLipM != null, rollInGlow, accent, dim)
-        drawDot(lip, dropToLipM != null || landingDropM != null, maxOf(rollInGlow, rampGlow, landingGlow), accent, dim)
-        drawDot(landing, landingDropM != null, landingGlow, accent, dim)
+        drawPointMarker(measurer, start, "A", dropToLipM != null, rollInGlow, accent, onAccent, dim)
+        drawPointMarker(
+            measurer, lip, "B", dropToLipM != null || landingDropM != null,
+            maxOf(rollInGlow, rampGlow, landingGlow), accent, onAccent, dim
+        )
+        drawPointMarker(measurer, landing, "C", landingDropM != null, landingGlow, accent, onAccent, dim)
 
         // The unknown the whole screen is for: how far out the landing is.
         drawDistanceSpan(
@@ -186,22 +190,34 @@ private fun DrawScope.fillUnder(edge: Path, endX: Float, color: Color, glow: Flo
     drawPath(filled, color, alpha = 0.08f + 0.10f * glow)
 }
 
-/** A measured point: solid once it has a value, hollow while it is still missing. */
-private fun DrawScope.drawDot(
+/** A lettered, measured point: solid with its letter once it has a value, hollow while missing. */
+@OptIn(ExperimentalTextApi::class)
+private fun DrawScope.drawPointMarker(
+    measurer: TextMeasurer,
     center: Offset,
+    label: String,
     hasValue: Boolean,
     glow: Float,
     accent: Color,
+    onAccent: Color,
     dim: Color
 ) {
-    val radius = 7f + 3f * glow
+    val radius = 10f + 3f * glow
     if (hasValue) {
         if (glow > 0.01f) {
             drawCircle(accent.copy(alpha = 0.3f * glow), radius + 6f, center)
         }
-        drawCircle(accent, radius, center)
+        drawMarker(measurer, center, label, accent, onAccent, radius)
     } else {
         drawCircle(dim, radius, center, style = Stroke(width = 2.5f))
+        val layout = measurer.measure(
+            AnnotatedString(label),
+            TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold, color = dim)
+        )
+        drawText(
+            layout,
+            topLeft = Offset(center.x - layout.size.width / 2f, center.y - layout.size.height / 2f)
+        )
     }
 }
 

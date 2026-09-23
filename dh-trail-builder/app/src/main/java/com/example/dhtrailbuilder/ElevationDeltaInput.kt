@@ -33,6 +33,8 @@ fun ElevationDeltaInput(
     presetPointACaption: String? = null,
     pointALabel: String = "top",
     pointBLabel: String = "bottom",
+    letterA: String = "A",
+    letterB: String = "B",
     onPointBCaptured: (Float) -> Unit = {}
 ) {
     var pointA by remember(presetPointA) { mutableStateOf(presetPointA) }
@@ -63,7 +65,7 @@ fun ElevationDeltaInput(
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             CaptureChip(
-                label = "A",
+                label = letterA,
                 captured = pointA != null,
                 enabled = liveSensors.altitudeM != null,
                 onCapture = {
@@ -74,7 +76,7 @@ fun ElevationDeltaInput(
                 }
             )
             CaptureChip(
-                label = "B",
+                label = letterB,
                 captured = pointB != null,
                 enabled = liveSensors.altitudeM != null,
                 onCapture = {

@@ -105,7 +105,9 @@ fun BermDistanceScreen(
                     presetPointA = landingAltitudeM,
                     presetPointACaption = "from Jump",
                     pointALabel = "landing",
-                    pointBLabel = "berm"
+                    pointBLabel = "berm",
+                    letterA = "C",
+                    letterB = "D"
                 )
             }
 
