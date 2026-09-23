@@ -101,7 +101,7 @@ fun LiveSensorBar(
                 color = MaterialTheme.colorScheme.outline
             )
             .clickable(enabled = liveSensors.barometerAvailable) { showCalibration = true }
-            .padding(horizontal = 12.dp, vertical = 5.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -126,7 +126,8 @@ fun LiveSensorBar(
 
         Row(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1f)
         ) {
             GpsDot(status = status)
             Text(
@@ -135,6 +136,8 @@ fun LiveSensorBar(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+
+        ThemeToggleChip()
     }
 
     if (showCalibration) {

@@ -1,56 +1,125 @@
 package com.example.dhtrailbuilder
 
+import android.content.Context
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-// Black canvas with off-white text and muted accents used only for meaning - Yaniv's
-// signature dark style: smooth, low-fatigue, never a colorful wash.
+// --- Dark mode: black canvas, off-white text, muted accents used only for meaning. ---
 private val CanvasBlack = Color(0xFF0A0A0B)
-private val TextPrimary = Color(0xFFECEAE6)
-private val TextSecondary = Color(0xFF9A9DA3)
+private val DarkTextPrimary = Color(0xFFECEAE6)
+private val DarkTextSecondary = Color(0xFF9A9DA3)
 
 private val CreamPrimary = Color(0xFFEDEBE6)
 private val CreamOnPrimary = Color(0xFF1B1A17)
 
-private val AccentGreen = Color(0xFF6FCB9F)
-private val AccentRed = Color(0xFFE08A80)
+private val DarkGreen = Color(0xFF6FCB9F)
+private val DarkRed = Color(0xFFE08A80)
 
-private val GlassSurface = Color(0xFF131315)
-private val GlassSurfaceLifted = Color(0xFF1B1B1E)
-private val HairlineBorder = Color(0x12FFFFFF)
+private val DarkGlassSurface = Color(0xFF131315)
+private val DarkGlassSurfaceLifted = Color(0xFF1B1B1E)
+private val DarkHairline = Color(0x12FFFFFF)
 
-private val DhDarkColors = darkColorScheme(
+private val DarkColors = darkColorScheme(
     primary = CreamPrimary,
     onPrimary = CreamOnPrimary,
     primaryContainer = Color(0xFF2A2823),
     onPrimaryContainer = CreamPrimary,
-    secondary = AccentGreen,
+    secondary = DarkGreen,
     onSecondary = Color(0xFF0B2117),
     secondaryContainer = Color(0xFF15221B),
-    onSecondaryContainer = AccentGreen,
+    onSecondaryContainer = DarkGreen,
     background = CanvasBlack,
-    onBackground = TextPrimary,
+    onBackground = DarkTextPrimary,
     surface = CanvasBlack,
-    onSurface = TextPrimary,
-    surfaceVariant = GlassSurface,
-    onSurfaceVariant = TextSecondary,
-    inverseSurface = GlassSurfaceLifted,
-    outline = HairlineBorder,
+    onSurface = DarkTextPrimary,
+    surfaceVariant = DarkGlassSurface,
+    onSurfaceVariant = DarkTextSecondary,
+    inverseSurface = DarkGlassSurfaceLifted,
+    outline = DarkHairline,
     outlineVariant = Color(0x0DFFFFFF),
-    error = AccentRed,
+    error = DarkRed,
     onError = Color(0xFF2A0E0B),
     errorContainer = Color(0xFF201412),
-    onErrorContainer = AccentRed
+    onErrorContainer = DarkRed
 )
+
+// --- Light mode: warm ivory canvas, near-black ink, same principles inverted. ---
+private val CanvasIvory = Color(0xFFFAF9F6)
+private val LightTextPrimary = Color(0xFF1C1C1E)
+private val LightTextSecondary = Color(0xFF6B6E74)
+
+private val InkPrimary = Color(0xFF1C1C1E)
+private val InkOnPrimary = Color(0xFFFAF9F6)
+
+private val LightGreen = Color(0xFF2E9E6E)
+private val LightRed = Color(0xFFC6584C)
+
+private val LightGlassSurface = Color(0xFFF1F0EC)
+private val LightGlassSurfaceLifted = Color(0xFFEDECE7)
+private val LightHairline = Color(0x141C1C1E)
+
+private val LightColors = lightColorScheme(
+    primary = InkPrimary,
+    onPrimary = InkOnPrimary,
+    primaryContainer = Color(0xFFE7E6E1),
+    onPrimaryContainer = InkPrimary,
+    secondary = LightGreen,
+    onSecondary = Color(0xFFF4FBF7),
+    secondaryContainer = Color(0xFFDCF0E6),
+    onSecondaryContainer = LightGreen,
+    background = CanvasIvory,
+    onBackground = LightTextPrimary,
+    surface = CanvasIvory,
+    onSurface = LightTextPrimary,
+    surfaceVariant = LightGlassSurface,
+    onSurfaceVariant = LightTextSecondary,
+    inverseSurface = LightGlassSurfaceLifted,
+    outline = LightHairline,
+    outlineVariant = Color(0x0A1C1C1E),
+    error = LightRed,
+    onError = Color(0xFFFBF2F0),
+    errorContainer = Color(0xFFF3E2DF),
+    onErrorContainer = LightRed
+)
+
+/** The four-hue iridescent glow: mint, soft gold, periwinkle, orchid - Yaniv's signature ambient. */
+internal data class GlowStop(val color: Color, val xFrac: Float, val yFrac: Float, val alpha: Float)
+
+private val GlowMint = Color(140, 224, 196)
+private val GlowGold = Color(232, 214, 158)
+private val GlowBlue = Color(150, 176, 232)
+private val GlowOrchid = Color(198, 150, 214)
+
+internal val DarkGlowStops = listOf(
+    GlowStop(GlowMint, 0.32f, 0.30f, 0.20f),
+    GlowStop(GlowGold, 0.70f, 0.24f, 0.15f),
+    GlowStop(GlowBlue, 0.66f, 0.68f, 0.19f),
+    GlowStop(GlowOrchid, 0.28f, 0.70f, 0.15f)
+)
+
+internal val LightGlowStops = listOf(
+    GlowStop(GlowMint, 0.32f, 0.30f, 0.14f),
+    GlowStop(GlowGold, 0.70f, 0.24f, 0.13f),
+    GlowStop(GlowBlue, 0.66f, 0.68f, 0.15f),
+    GlowStop(GlowOrchid, 0.28f, 0.70f, 0.13f)
+)
+
+/** The light-mode-only glowing CTA gradient (dark mode's CTA stays a flat solid cream pill). */
+internal val CtaGradientColors = listOf(
+    Color(0xFF8FE3C0), Color(0xFFE8D69E), Color(0xFF96B0E8), Color(0xFFC29CD0)
+)
+internal val CtaOnGradient = Color(0xFF171512)
 
 private val DhShapes = Shapes(
     extraSmall = RoundedCornerShape(10.dp),
@@ -60,28 +129,58 @@ private val DhShapes = Shapes(
     extraLarge = RoundedCornerShape(28.dp)
 )
 
+// Sizes bumped up from stock Material3 defaults so numbers and controls stay readable in
+// bright outdoor light, not just on a dim indoor screen.
 private val BaseTypography = Typography()
 private val DhTypography = BaseTypography.copy(
-    displaySmall = BaseTypography.displaySmall.copy(fontWeight = FontWeight.Light),
-    headlineSmall = BaseTypography.headlineSmall.copy(fontWeight = FontWeight.Light),
+    displaySmall = BaseTypography.displaySmall.copy(fontSize = 42.sp, fontWeight = FontWeight.Light),
+    headlineSmall = BaseTypography.headlineSmall.copy(fontSize = 28.sp, fontWeight = FontWeight.Light),
     headlineMedium = BaseTypography.headlineMedium.copy(fontWeight = FontWeight.Light),
-    titleLarge = BaseTypography.titleLarge.copy(fontWeight = FontWeight.Medium),
-    titleMedium = BaseTypography.titleMedium.copy(fontWeight = FontWeight.Medium),
-    labelSmall = BaseTypography.labelSmall.copy(
-        fontFamily = FontFamily.Monospace,
-        letterSpacing = 1.1.sp
-    ),
+    titleLarge = BaseTypography.titleLarge.copy(fontSize = 22.sp, fontWeight = FontWeight.Medium),
+    titleMedium = BaseTypography.titleMedium.copy(fontSize = 18.sp, fontWeight = FontWeight.Medium),
+    bodyLarge = BaseTypography.bodyLarge.copy(fontSize = 17.sp),
+    bodyMedium = BaseTypography.bodyMedium.copy(fontSize = 16.sp),
+    bodySmall = BaseTypography.bodySmall.copy(fontSize = 14.sp),
+    labelLarge = BaseTypography.labelLarge.copy(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
     labelMedium = BaseTypography.labelMedium.copy(
         fontFamily = FontFamily.Monospace,
+        fontSize = 13.sp,
         letterSpacing = 0.9.sp
+    ),
+    labelSmall = BaseTypography.labelSmall.copy(
+        fontFamily = FontFamily.Monospace,
+        fontSize = 12.sp,
+        letterSpacing = 1.1.sp
     )
 )
 
-/** Always dark - smooth and low-fatigue is the point, light mode is not offered. */
+/** Whether the app is in dark mode right now, and how to flip it - read anywhere via `.current`. */
+data class AppThemeState(val isDark: Boolean, val toggle: () -> Unit)
+
+val LocalAppTheme = staticCompositionLocalOf { AppThemeState(isDark = true, toggle = {}) }
+
+internal val GlowStops: List<GlowStop>
+    @Composable get() = if (LocalAppTheme.current.isDark) DarkGlowStops else LightGlowStops
+
+private const val PREFS_NAME = "dh_trail_builder_prefs"
+private const val KEY_DARK_MODE = "dark_mode"
+
+fun loadDarkModePreference(context: Context): Boolean =
+    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .getBoolean(KEY_DARK_MODE, true)
+
+fun saveDarkModePreference(context: Context, isDark: Boolean) {
+    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .edit()
+        .putBoolean(KEY_DARK_MODE, isDark)
+        .apply()
+}
+
+/** Dark by default; light mode is a first-class alternative, toggled from the top bar. */
 @Composable
-fun DhTrailBuilderTheme(content: @Composable () -> Unit) {
+fun DhTrailBuilderTheme(darkTheme: Boolean, content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = DhDarkColors,
+        colorScheme = if (darkTheme) DarkColors else LightColors,
         shapes = DhShapes,
         typography = DhTypography,
         content = content

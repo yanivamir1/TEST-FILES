@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
@@ -156,7 +155,8 @@ fun BermDistanceScreen(
             }
 
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Button(
+                PrimaryActionButton(
+                    text = "Calculate run-out",
                     onClick = {
                         val landingSpeed = landingSpeedText.toFloatOrNull()
                         val targetSpeed = targetSpeedText.toFloatOrNull()
@@ -186,7 +186,7 @@ fun BermDistanceScreen(
                             }
                         }
                     }
-                ) { Text("Calculate run-out") }
+                )
             }
 
             inputProblem?.let { NoticeCard(it, isError = true) }

@@ -15,6 +15,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,9 +45,19 @@ class MainActivity : ComponentActivity() {
         angleRepository = AngleRepository(applicationContext)
 
         setContent {
-            DhTrailBuilderTheme {
-                AppBackground {
-                    AppRoot(sensorRepository, locationRepository, angleRepository)
+            var isDark by remember { mutableStateOf(loadDarkModePreference(applicationContext)) }
+            val themeState = AppThemeState(
+                isDark = isDark,
+                toggle = {
+                    isDark = !isDark
+                    saveDarkModePreference(applicationContext, isDark)
+                }
+            )
+            CompositionLocalProvider(LocalAppTheme provides themeState) {
+                DhTrailBuilderTheme(darkTheme = isDark) {
+                    AppBackground {
+                        AppRoot(sensorRepository, locationRepository, angleRepository)
+                    }
                 }
             }
         }

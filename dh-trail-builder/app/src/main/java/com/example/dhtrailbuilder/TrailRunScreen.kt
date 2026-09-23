@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -187,9 +186,11 @@ fun TrailRunScreen(
                         "Test (no GPS) to check the jump detection indoors.",
                     style = MaterialTheme.typography.bodyMedium
                 )
-                Button(onClick = onRequestPermission, modifier = Modifier.fillMaxWidth()) {
-                    Text("Grant permission")
-                }
+                PrimaryActionButton(
+                    text = "Grant permission",
+                    onClick = onRequestPermission,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
 
@@ -205,11 +206,12 @@ fun TrailRunScreen(
                 }
             }
 
-            Button(
+            PrimaryActionButton(
+                text = if (isRecording) "Stop recording" else "Start recording",
                 onClick = { if (isRecording) stopRecording() else startRecording() },
                 enabled = mode == RecordMode.NoGps || hasLocationPermission,
                 modifier = Modifier.fillMaxWidth()
-            ) { Text(if (isRecording) "Stop recording" else "Start recording") }
+            )
 
             RecordingStatus(
                 isRecording = isRecording,

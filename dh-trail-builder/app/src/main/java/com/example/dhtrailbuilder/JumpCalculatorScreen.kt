@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
 import androidx.compose.runtime.Composable
@@ -138,7 +137,8 @@ fun JumpCalculatorScreen(
             }
 
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Button(
+                PrimaryActionButton(
+                    text = "Calculate jump",
                     onClick = {
                         val startSpeedMs = (startSpeedText.toFloatOrNull() ?: 0f) / 3.6f
                         val drop1 = dropToLip
@@ -159,7 +159,7 @@ fun JumpCalculatorScreen(
                             JumpOutcome.Computed(result)
                         }
                     }
-                ) { Text("Calculate jump") }
+                )
             }
 
             when (val current = outcome) {

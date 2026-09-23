@@ -18,12 +18,18 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,11 +38,14 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.Locale
@@ -45,27 +54,27 @@ fun formatValue(value: Float, decimals: Int = 1): String =
     String.format(Locale.US, "%.${decimals}f", value)
 
 /**
- * Black canvas with a couple of large, heavily-softened glow orbs bleeding into the dark -
- * just a hint of muted color, never a colorful wash. Every screen sits inside this.
+ * Canvas with a soft iridescent glow bleeding into it - four low-opacity radial blooms (mint,
+ * gold, periwinkle, orchid) that melt into each other, never a flat colored wash. Every screen
+ * sits inside this; the same recipe runs in both dark and light mode, just fainter in light.
  */
 @Composable
 fun AppBackground(modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) {
+    val stops = GlowStops
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            drawGlowOrb(
-                color = Color(170, 112, 70),
-                center = Offset(size.width * 0.12f, size.height * 0.06f),
-                radius = size.maxDimension * 0.5f
-            )
-            drawGlowOrb(
-                color = Color(92, 112, 142),
-                center = Offset(size.width * 0.95f, size.height * 0.8f),
-                radius = size.maxDimension * 0.55f
-            )
+            stops.forEach { stop ->
+                drawGlowOrb(
+                    color = stop.color,
+                    alpha = stop.alpha,
+                    center = Offset(size.width * stop.xFrac, size.height * stop.yFrac),
+                    radius = size.maxDimension * 0.42f
+                )
+            }
         }
         content()
     }
@@ -73,12 +82,13 @@ fun AppBackground(modifier: Modifier = Modifier, content: @Composable BoxScope.(
 
 private fun DrawScope.drawGlowOrb(
     color: Color,
+    alpha: Float,
     center: Offset,
     radius: Float
 ) {
     drawCircle(
         brush = Brush.radialGradient(
-            colors = listOf(color.copy(alpha = 0.22f), color.copy(alpha = 0f)),
+            colors = listOf(color.copy(alpha = alpha), color.copy(alpha = 0f)),
             center = center,
             radius = radius
         ),
@@ -87,7 +97,8 @@ private fun DrawScope.drawGlowOrb(
     )
 }
 
-internal val GlassBorder = Color(0x12FFFFFF)
+internal val GlassBorder: Color
+    @Composable get() = if (LocalAppTheme.current.isDark) Color(0x12FFFFFF) else Color(0x141C1C1E)
 
 /**
  * Glass row group: near-black fill, hairline border, one small caps title. Deliberately thin -
@@ -322,16 +333,16 @@ fun InlineValueField(
     modifier: Modifier = Modifier,
     unit: String? = null,
     isError: Boolean = false,
-    width: Dp = 68.dp
+    width: Dp = 80.dp
 ) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
             singleLine = true,
             textStyle = LocalTextStyle.current.copy(
                 color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-                fontSize = 16.sp,
+                fontSize = 20.sp,
                 fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.End
             ),
@@ -364,7 +375,7 @@ fun CaptureChip(
 
     Box(
         modifier = modifier
-            .size(32.dp)
+            .size(40.dp)
             .clip(CircleShape)
             .background(fillColor)
             .border(width = 1.dp, color = borderColor, shape = CircleShape)
@@ -373,9 +384,97 @@ fun CaptureChip(
     ) {
         Text(
             text = label,
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Bold,
             color = if (enabled) foreground else foreground.copy(alpha = 0.4f)
+        )
+    }
+}
+
+/**
+ * Primary call-to-action. Dark mode: the flat solid cream pill. Light mode: the iridescent
+ * gradient pill with a soft glowing halo behind it - Yaniv's Opal-style light-mode CTA.
+ */
+@Composable
+fun PrimaryActionButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
+) {
+    if (LocalAppTheme.current.isDark) {
+        Button(onClick = onClick, enabled = enabled, modifier = modifier) {
+            Text(text)
+        }
+    } else {
+        GlowGradientButton(text = text, onClick = onClick, enabled = enabled, modifier = modifier)
+    }
+}
+
+@Composable
+private fun GlowGradientButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
+) {
+    var buttonSize by remember { mutableStateOf(IntSize.Zero) }
+    val density = LocalDensity.current
+    val shape = MaterialTheme.shapes.large
+
+    Box(contentAlignment = Alignment.Center) {
+        if (buttonSize != IntSize.Zero) {
+            val haloWidth = with(density) { (buttonSize.width * 2.4f).toDp() }
+            val haloHeight = with(density) { (buttonSize.height * 3.2f).toDp() }
+            Canvas(modifier = Modifier.size(haloWidth, haloHeight)) {
+                val center = Offset(size.width / 2f, size.height / 2f)
+                listOf(0.55f to 0.62f, 0.35f to 0.80f, 0.18f to 1.0f).forEach { (alpha, scale) ->
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = CtaGradientColors.map { it.copy(alpha = alpha) },
+                            center = center,
+                            radius = size.minDimension * scale / 2f
+                        ),
+                        radius = size.minDimension * scale / 2f,
+                        center = center
+                    )
+                }
+            }
+        }
+        Button(
+            onClick = onClick,
+            enabled = enabled,
+            shape = shape,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color.Transparent,
+                contentColor = CtaOnGradient,
+                disabledContainerColor = Color.Transparent
+            ),
+            modifier = modifier
+                .onSizeChanged { buttonSize = it }
+                .background(brush = Brush.linearGradient(CtaGradientColors), shape = shape)
+        ) {
+            Text(text, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+/** Small sun/moon pill that flips light/dark mode - lives in the persistent top bar. */
+@Composable
+fun ThemeToggleChip(modifier: Modifier = Modifier) {
+    val theme = LocalAppTheme.current
+    Box(
+        modifier = modifier
+            .size(28.dp)
+            .clip(CircleShape)
+            .border(width = 1.dp, color = GlassBorder, shape = CircleShape)
+            .clickable { theme.toggle() },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = if (theme.isDark) "☀" else "☽",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
