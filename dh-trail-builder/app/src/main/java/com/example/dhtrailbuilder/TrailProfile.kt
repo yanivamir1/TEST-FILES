@@ -56,7 +56,6 @@ fun TrailProfile(
 ) {
     val measurer = rememberTextMeasurer()
     val accent = MaterialTheme.colorScheme.primary
-    val onAccent = MaterialTheme.colorScheme.onPrimary
     val dim = MaterialTheme.colorScheme.onSurfaceVariant
     val caption = MaterialTheme.colorScheme.onSurfaceVariant
 
@@ -111,12 +110,12 @@ fun TrailProfile(
             )
         }
 
-        drawPointMarker(measurer, start, "A", dropToLipM != null, rollInGlow, accent, onAccent, dim)
+        drawPointMarker(measurer, start, "A", dropToLipM != null, rollInGlow, accent, dim)
         drawPointMarker(
             measurer, lip, "B", dropToLipM != null || landingDropM != null,
-            maxOf(rollInGlow, rampGlow, landingGlow), accent, onAccent, dim
+            maxOf(rollInGlow, rampGlow, landingGlow), accent, dim
         )
-        drawPointMarker(measurer, landing, "C", landingDropM != null, landingGlow, accent, onAccent, dim)
+        drawPointMarker(measurer, landing, "C", landingDropM != null, landingGlow, accent, dim)
 
         // The unknown the whole screen is for: how far out the landing is.
         drawDistanceSpan(
@@ -190,35 +189,40 @@ private fun DrawScope.fillUnder(edge: Path, endX: Float, color: Color, glow: Flo
     drawPath(filled, color, alpha = 0.08f + 0.10f * glow)
 }
 
-/** A lettered, measured point: solid with its letter once it has a value, hollow while missing. */
+/**
+ * A lettered, measured point: a small dot sits right on the trail line (that's the actual
+ * point being measured), and its letter floats above the dot rather than inside it - a
+ * letter drawn on top of the ground/arc lines passing through the point is unreadable.
+ */
 @OptIn(ExperimentalTextApi::class)
-private fun DrawScope.drawPointMarker(
+internal fun DrawScope.drawPointMarker(
     measurer: TextMeasurer,
     center: Offset,
     label: String,
     hasValue: Boolean,
     glow: Float,
     accent: Color,
-    onAccent: Color,
     dim: Color
 ) {
-    val radius = 10f + 3f * glow
-    if (hasValue) {
-        if (glow > 0.01f) {
-            drawCircle(accent.copy(alpha = 0.3f * glow), radius + 6f, center)
-        }
-        drawMarker(measurer, center, label, accent, onAccent, radius)
-    } else {
-        drawCircle(dim, radius, center, style = Stroke(width = 2.5f))
-        val layout = measurer.measure(
-            AnnotatedString(label),
-            TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold, color = dim)
-        )
-        drawText(
-            layout,
-            topLeft = Offset(center.x - layout.size.width / 2f, center.y - layout.size.height / 2f)
-        )
+    val radius = 6f + 2f * glow
+    val color = if (hasValue) accent else dim
+    if (hasValue && glow > 0.01f) {
+        drawCircle(accent.copy(alpha = 0.3f * glow), radius + 6f, center)
     }
+    if (hasValue) {
+        drawCircle(color, radius, center)
+    } else {
+        drawCircle(color, radius, center, style = Stroke(width = 2.5f))
+    }
+
+    val layout = measurer.measure(
+        AnnotatedString(label),
+        TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = color)
+    )
+    drawText(
+        layout,
+        topLeft = Offset(center.x - layout.size.width / 2f, center.y - radius - layout.size.height - 4f)
+    )
 }
 
 /** Vertical height difference between two altitudes, with its value. */
