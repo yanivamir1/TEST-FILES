@@ -24,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
@@ -137,6 +138,12 @@ fun LiveSensorBar(
             )
         }
 
+        Text(
+            text = appVersionName(),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
         ThemeToggleChip()
     }
 
@@ -219,4 +226,15 @@ private fun AltitudeCalibrationDialog(
             ) { Text("Reset to standard") }
         }
     )
+}
+
+/** The installed build's version ("v1", "v2", ...) - set in app/build.gradle.kts. */
+@Composable
+private fun appVersionName(): String {
+    val context = LocalContext.current
+    return remember {
+        runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        }.getOrNull() ?: ""
+    }
 }

@@ -230,11 +230,12 @@ fun TrailRunScreen(
         }
 
         if (!hasLocationPermission && mode == RecordMode.Gps) {
-            SectionCard(title = "Ride log", subtitle = "Checks the calculated jump against a real run") {
+            SectionCard(title = "Record", subtitle = "Checks the calculated jump against a real run") {
                 Text(
                     "Location permission is required to record with GPS. You can still use " +
                         "Test (no GPS) to check the jump detection indoors.",
-                    style = MaterialTheme.typography.bodyMedium
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 PrimaryActionButton(
                     text = "Grant permission",
@@ -244,7 +245,7 @@ fun TrailRunScreen(
             }
         }
 
-        SectionCard(title = "Ride log", subtitle = "Checks the calculated jump against a real run") {
+        SectionCard(title = "Record", subtitle = "Checks the calculated jump against a real run") {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 RecordMode.entries.forEach { option ->
                     FilterChip(
@@ -296,7 +297,7 @@ fun TrailRunScreen(
 }
 
 /** Stats, chart and (optionally) the detected-jump comparison for a set of samples. Shared by
- * the live Ride Log view (after a recording stops) and the History detail view. */
+ * the live Run-up view (after a recording stops) and the History detail view. */
 @Composable
 fun RunResultsSection(
     samples: List<RunSample>,
@@ -713,7 +714,8 @@ private fun RecordingStatus(
         Text(
             text = headline,
             style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
         )
         detail?.let {
             Text(

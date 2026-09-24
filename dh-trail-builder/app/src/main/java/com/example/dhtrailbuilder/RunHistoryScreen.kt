@@ -71,11 +71,11 @@ fun RunHistoryScreen(
             .padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        SectionCard(title = "Saved runs", subtitle = "Recordings from Ride Log") {
+        SectionCard(title = "Saved runs", subtitle = "Recordings from Run-up") {
             Text(
                 text = when {
                     !loaded -> "Loading…"
-                    runs.isEmpty() -> "No runs recorded yet - record one from Ride Log and it will show up here."
+                    runs.isEmpty() -> "No runs recorded yet - record one from Run-up and it will show up here."
                     else -> "${runs.size} saved"
                 },
                 style = MaterialTheme.typography.bodySmall,
@@ -121,7 +121,8 @@ private fun RunRow(
                 Text(
                     text = dateFormat.format(Date(summary.startedAtMs)),
                     style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = summaryLine(summary),

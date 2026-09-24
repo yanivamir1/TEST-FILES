@@ -76,3 +76,17 @@ nested inside a `Card`/`Button`/`SectionCard`/etc. must set its color explicitly
 `MaterialTheme.colorScheme.onSurface` for primary text, `onSurfaceVariant` for secondary/
 muted text. Never rely on the default. When adding a new top-level bar, chip, or overlay,
 check this before considering the change done.
+
+## Android apps: number every build v1, v2, v3...
+
+Every build pushed for the user gets the next version number, starting from v1. Before
+each commit that changes an app, bump both values in `app/build.gradle.kts`:
+
+```kotlin
+versionCode = 2        // +1 every build
+versionName = "v2"     // always "v" + versionCode
+```
+
+The version is shown in the app's top bar and the CI artifact is named after it
+(e.g. `dh-trail-builder-v2`), so the user can tell at a glance which build is installed.
+Always mention the new version number when reporting a build to the user.

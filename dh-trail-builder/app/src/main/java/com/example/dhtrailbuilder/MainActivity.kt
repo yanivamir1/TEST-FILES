@@ -28,7 +28,7 @@ import androidx.core.content.ContextCompat
 private enum class Screen(val label: String) {
     Jump("Jump"),
     Berm("Berm"),
-    RideLog("Ride Log"),
+    RideLog("Run-up"),
     History("History")
 }
 

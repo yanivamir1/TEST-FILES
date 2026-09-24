@@ -196,7 +196,9 @@ fun ReadoutTile(
                 style = if (emphasis) MaterialTheme.typography.displaySmall
                 else MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
-                color = valueColor
+                // Explicit fallback: tiles also sit in bare Rows (run stats), where the default
+                // content color is black on the dark background.
+                color = if (valueColor == Color.Unspecified) MaterialTheme.colorScheme.onSurface else valueColor
             )
             Text(
                 text = unit,
