@@ -1,6 +1,7 @@
 package com.example.dhtrailbuilder
 
 import android.location.Location
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,6 +25,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import java.util.Locale
@@ -208,7 +212,8 @@ fun TrailRunScreen(
     ) {
         LiveSpeedCard(
             currentKmh = liveSpeedKmh,
-            maxKmh30s = speedWindow.maxOfOrNull { it.second } ?: 0f
+            maxKmh30s = speedWindow.maxOfOrNull { it.second } ?: 0f,
+            trace = speedWindow
         )
 
         if (!isRecording) {
@@ -358,10 +363,11 @@ fun RunResultsSection(
     }
 }
 
-/** Live speed, always on regardless of recording: current reading and the fastest point in
- * the last 30 seconds. */
+/** Live speed, always on regardless of recording: current reading, the fastest point in the
+ * last 30 seconds, and a trace of that window with the peak and the hardest braking marked -
+ * literally where the speed was highest and where it dropped fastest. */
 @Composable
-private fun LiveSpeedCard(currentKmh: Float?, maxKmh30s: Float) {
+private fun LiveSpeedCard(currentKmh: Float?, maxKmh30s: Float, trace: List<Pair<Long, Float>>) {
     SectionCard(title = "Live speed", subtitle = "Works even before you start recording") {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -377,6 +383,62 @@ private fun LiveSpeedCard(currentKmh: Float?, maxKmh30s: Float) {
                 value = formatValue(maxKmh30s, 0),
                 unit = "km/h"
             )
+        }
+
+        if (trace.size >= 2) {
+            SpeedTraceChart(
+                trace = trace,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp)
+                    .padding(top = 4.dp)
+            )
+        }
+    }
+}
+
+/**
+ * The last 30s of speed as a simple line, cream dot at the peak, red dot at the single
+ * biggest drop between two consecutive readings - the moment braking bit hardest.
+ */
+@Composable
+private fun SpeedTraceChart(trace: List<Pair<Long, Float>>, modifier: Modifier = Modifier) {
+    val lineColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val peakColor = MaterialTheme.colorScheme.primary
+    val brakeColor = MaterialTheme.colorScheme.error
+
+    Canvas(modifier = modifier) {
+        val minT = trace.first().first
+        val maxT = trace.last().first
+        val spanT = (maxT - minT).coerceAtLeast(1L)
+        val maxSpeed = trace.maxOf { it.second }.coerceAtLeast(1f)
+
+        fun xOf(t: Long) = size.width * (t - minT).toFloat() / spanT
+        fun yOf(v: Float) = size.height * (1f - (v / maxSpeed).coerceIn(0f, 1f))
+
+        val path = Path()
+        trace.forEachIndexed { index, (t, v) ->
+            val x = xOf(t)
+            val y = yOf(v)
+            if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        }
+        drawPath(path, lineColor, style = Stroke(width = 3f))
+
+        val peak = trace.maxByOrNull { it.second }
+        peak?.let { (t, v) -> drawCircle(peakColor, 5f, Offset(xOf(t), yOf(v))) }
+
+        var brakeIndex = -1
+        var biggestDrop = 0f
+        for (i in 1 until trace.size) {
+            val drop = trace[i - 1].second - trace[i].second
+            if (drop > biggestDrop) {
+                biggestDrop = drop
+                brakeIndex = i
+            }
+        }
+        if (brakeIndex >= 0 && biggestDrop > 2f) {
+            val (t, v) = trace[brakeIndex]
+            drawCircle(brakeColor, 5f, Offset(xOf(t), yOf(v)))
         }
     }
 }
@@ -396,6 +458,16 @@ private fun ApproachCheckCard(
     landingDropM: Float?,
     onLandingDropChange: (Float?) -> Unit
 ) {
+    val speed = liveSpeedKmh
+    val angle = rampAngleDeg
+    val drop = landingDropM
+    val result = if (speed != null && angle != null && drop != null) {
+        Physics.computeJump(speed / 3.6f, angle, drop)
+    } else {
+        null
+    }
+    val landed = result as? Physics.JumpResult.Landed
+
     DiagramCard(
         instruction = "B at the ramp, C where you'd touch down",
         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
@@ -403,6 +475,7 @@ private fun ApproachCheckCard(
         RampLandingProfile(
             rampAngleDeg = rampAngleDeg,
             landingDropM = landingDropM,
+            jumpDistanceM = landed?.distanceM,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(92.dp)
@@ -433,32 +506,23 @@ private fun ApproachCheckCard(
         )
     }
 
-    val speed = liveSpeedKmh
-    val angle = rampAngleDeg
-    val drop = landingDropM
-
     when {
         speed == null -> NoticeCard("Waiting for a live GPS speed reading.")
         angle == null -> NoticeCard("Measure the ramp angle above to see the estimate.")
         drop == null -> NoticeCard("Measure the landing drop above to see the estimate.")
-        else -> {
-            val result = Physics.computeJump(speed / 3.6f, angle, drop)
-            when (result) {
-                is Physics.JumpResult.ShortOfLanding -> NoticeCard(
-                    "You would not clear it at your current speed (${formatValue(speed, 0)} km/h).",
-                    isError = true
-                )
-                is Physics.JumpResult.Landed -> ResultCard(
-                    primaryLabel = "ESTIMATED DISTANCE",
-                    primaryValue = formatValue(result.distanceM),
-                    primaryUnit = "m",
-                    secondary = listOf(
-                        "At current speed" to "${formatValue(speed, 0)} km/h",
-                        "Air time" to "${formatValue(result.airTimeSec, 2)} s"
-                    )
-                )
-            }
-        }
+        result is Physics.JumpResult.ShortOfLanding -> NoticeCard(
+            "You would not clear it at your current speed (${formatValue(speed, 0)} km/h).",
+            isError = true
+        )
+        landed != null -> ResultCard(
+            primaryLabel = "ESTIMATED DISTANCE",
+            primaryValue = formatValue(landed.distanceM),
+            primaryUnit = "m",
+            secondary = listOf(
+                "At current speed" to "${formatValue(speed, 0)} km/h",
+                "Air time" to "${formatValue(landed.airTimeSec, 2)} s"
+            )
+        )
     }
 }
 

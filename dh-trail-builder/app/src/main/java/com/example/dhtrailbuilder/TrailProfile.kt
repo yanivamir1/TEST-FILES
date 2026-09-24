@@ -138,11 +138,13 @@ fun TrailProfile(
 fun RampLandingProfile(
     rampAngleDeg: Float?,
     landingDropM: Float?,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    jumpDistanceM: Float? = null
 ) {
     val measurer = rememberTextMeasurer()
     val accent = MaterialTheme.colorScheme.primary
     val dim = MaterialTheme.colorScheme.onSurfaceVariant
+    val secondary = MaterialTheme.colorScheme.secondary
 
     val spec = tween<Float>(durationMillis = 300)
     val landingY by animateFloatAsState(
@@ -178,6 +180,19 @@ fun RampLandingProfile(
 
         drawPointMarker(measurer, lip, "B", rampAngleDeg != null, 0f, accent, dim)
         drawPointMarker(measurer, landing, "C", landingDropM != null, 0f, accent, dim)
+
+        // How far you'd actually clear, drawn as its own span under the picture - the number
+        // in the result card is easy to skim past, a line under the arc is not.
+        if (jumpDistanceM != null) {
+            drawDistanceSpan(
+                measurer = measurer,
+                fromX = lip.x,
+                toX = landing.x,
+                y = size.height * 0.94f,
+                label = "${formatValue(jumpDistanceM)} m",
+                color = secondary
+            )
+        }
     }
 }
 

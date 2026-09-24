@@ -67,10 +67,14 @@ class LocationRepository(context: Context) {
             }
         }
 
+        // minDistance must be 0 - a non-zero value suppresses updates while the phone is
+        // stationary (testing indoors, standing at the lip, a rider stopped mid-approach),
+        // which was starving the GPS status dot and the live speedometer after ~12s of no
+        // movement even with a perfectly good fix.
         locationManager.requestLocationUpdates(
             LocationManager.GPS_PROVIDER,
             1000L,
-            1f,
+            0f,
             listener
         )
         awaitClose { locationManager.removeUpdates(listener) }
