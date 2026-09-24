@@ -254,26 +254,9 @@ fun TrailRunScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(10.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        LiveSpeedCard(
-            currentKmh = liveSpeedKmh,
-            maxKmh30s = speedWindow.maxOfOrNull { it.second } ?: 0f,
-            trace = speedWindow
-        )
-
-        if (!isRecording) {
-            ApproachCheckCard(
-                liveSensors = liveSensors,
-                liveSpeedKmh = liveSpeedKmh,
-                rampAngleDeg = approachRampAngleDeg,
-                onRampAngleChange = { approachRampAngleDeg = it },
-                landingDropM = approachLandingDropM,
-                onLandingDropChange = { approachLandingDropM = it }
-            )
-        }
-
         if (!hasLocationPermission && mode == RecordMode.Gps) {
             SectionCard(title = "Record", subtitle = "Checks the calculated jump against a real run") {
                 Text(
@@ -290,7 +273,8 @@ fun TrailRunScreen(
             }
         }
 
-        SectionCard(title = "Record", subtitle = "Checks the calculated jump against a real run") {
+        // Start/stop comes first - it is the one thing you always want without scrolling.
+        SectionCard(title = "Record") {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 RecordMode.entries.forEach { option ->
                     FilterChip(
@@ -348,6 +332,18 @@ fun TrailRunScreen(
             }
         }
 
+        // Right under Start recording: the live estimate, so the number you care about most
+        // never needs a scroll to reach.
+        if (!isRecording) {
+            ApproachEstimateCard(
+                liveSpeedKmh = liveSpeedKmh,
+                rampAngleDeg = approachRampAngleDeg,
+                landingDropM = approachLandingDropM
+            )
+        }
+
+        // Once a run is stopped, its profile (with the slider and markers) comes right after
+        // the estimate - still above the fold on most phones.
         RunResultsSection(
             samples = samples,
             mode = mode,
@@ -357,6 +353,24 @@ fun TrailRunScreen(
             rampAngleDeg = approachRampAngleDeg,
             landingDropM = approachLandingDropM
         )
+
+        LiveSpeedCard(
+            currentKmh = liveSpeedKmh,
+            maxKmh30s = speedWindow.maxOfOrNull { it.second } ?: 0f,
+            trace = speedWindow
+        )
+
+        // The full measurement UI (diagram, capture chips, +/- rows) stays lower - the compact
+        // estimate above already shows the number while riding.
+        if (!isRecording) {
+            ApproachInputsCard(
+                liveSensors = liveSensors,
+                rampAngleDeg = approachRampAngleDeg,
+                onRampAngleChange = { approachRampAngleDeg = it },
+                landingDropM = approachLandingDropM,
+                onLandingDropChange = { approachLandingDropM = it }
+            )
+        }
     }
 }
 
@@ -389,13 +403,10 @@ fun RunResultsSection(
     val scrubIndex = (userScrubIndex ?: samples.lastIndex).coerceIn(0, samples.lastIndex)
     val scrubSample = samples[scrubIndex]
 
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        RunStats(samples, useDistance)
-
-        SectionCard(
-            title = "Trail profile",
-            subtitle = if (useDistance) "Altitude over ground distance" else "Altitude over time"
-        ) {
+    // The chart sits first - the whole point is to see it (and the stats below it) without
+    // scrolling right after stopping a recording.
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        SectionCard(title = "Trail profile") {
             RideProfileChart(
                 points = points,
                 takeoff = takeoffSample?.let {
@@ -409,25 +420,22 @@ fun RunResultsSection(
                 braking = brakeSample?.let { JumpMarker(xOf(it), it.altitudeM) },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(130.dp)
+                    .height(88.dp)
             )
-            AxisLabels(
-                minValue = samples.minOf { it.altitudeM },
-                maxValue = samples.maxOf { it.altitudeM },
-                unit = "m"
-            )
-            if (peakSample != null) {
-                MarkerLegend(showBraking = brakeSample != null)
-            }
-
-            ScrubReadout(sample = scrubSample, useDistance = useDistance)
             Slider(
                 value = scrubIndex.toFloat(),
                 onValueChange = { userScrubIndex = it.roundToInt() },
                 valueRange = 0f..samples.lastIndex.toFloat().coerceAtLeast(0f),
-                steps = (samples.size - 2).coerceAtLeast(0)
+                steps = (samples.size - 2).coerceAtLeast(0),
+                modifier = Modifier.height(28.dp)
             )
+            ScrubReadout(sample = scrubSample, useDistance = useDistance)
+            if (peakSample != null) {
+                MarkerLegend(showBraking = brakeSample != null)
+            }
         }
+
+        RunStats(samples, useDistance)
 
         if (showComparison && useDistance) {
             PotentialJumpCard(
@@ -456,10 +464,10 @@ fun RunResultsSection(
  * literally where the speed was highest and where it dropped fastest. */
 @Composable
 private fun LiveSpeedCard(currentKmh: Float?, maxKmh30s: Float, trace: List<Pair<Long, Float>>) {
-    SectionCard(title = "Live speed", subtitle = "Works even before you start recording") {
+    SectionCard(title = "Live speed") {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(28.dp)
+            horizontalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             ReadoutTile(
                 label = "SPEED",
@@ -478,8 +486,8 @@ private fun LiveSpeedCard(currentKmh: Float?, maxKmh30s: Float, trace: List<Pair
                 trace = trace,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(44.dp)
-                    .padding(top = 4.dp)
+                    .height(32.dp)
+                    .padding(top = 2.dp)
             )
         }
     }
@@ -532,19 +540,15 @@ private fun SpeedTraceChart(trace: List<Pair<Long, Float>>, modifier: Modifier =
 }
 
 /**
- * Would you clear it right now? A live distance estimate from the current GPS speed plus the
- * ramp geometry - no recording, no capture-and-stop test. Structured like the Jump tab's own
- * Landing and Takeoff sections, letters carried over (B = ramp, C = landing) so the diagram and
- * the capture chips always point at the same spot.
+ * Just the number: would you clear it right now, at the live GPS speed and the ramp geometry
+ * already captured. No diagram, no inputs - those live in [ApproachInputsCard] further down -
+ * so this sits right under Start recording without pushing it off screen.
  */
 @Composable
-private fun ApproachCheckCard(
-    liveSensors: LiveSensorState,
+private fun ApproachEstimateCard(
     liveSpeedKmh: Float?,
     rampAngleDeg: Float?,
-    onRampAngleChange: (Float?) -> Unit,
-    landingDropM: Float?,
-    onLandingDropChange: (Float?) -> Unit
+    landingDropM: Float?
 ) {
     val speed = liveSpeedKmh
     val angle = rampAngleDeg
@@ -556,17 +560,52 @@ private fun ApproachCheckCard(
     }
     val landed = result as? Physics.JumpResult.Landed
 
+    when {
+        speed == null -> NoticeCard("Waiting for a live GPS speed reading.")
+        angle == null -> NoticeCard("Measure the ramp angle below to see the estimate.")
+        drop == null -> NoticeCard("Measure the landing drop below to see the estimate.")
+        result is Physics.JumpResult.ShortOfLanding -> NoticeCard(
+            "You would not clear it at your current speed (${formatValue(speed, 0)} km/h).",
+            isError = true
+        )
+        landed != null -> ResultCard(
+            primaryLabel = "ESTIMATED DISTANCE",
+            primaryValue = formatValue(landed.distanceM),
+            primaryUnit = "m",
+            secondary = listOf(
+                "At current speed" to "${formatValue(speed, 0)} km/h",
+                "Air time" to "${formatValue(landed.airTimeSec, 2)} s"
+            )
+        )
+    }
+}
+
+/**
+ * The diagram, capture chips and +/- rows behind the estimate above: B at the ramp, C where
+ * you'd touch down. Structured like the Jump tab's own Landing and Takeoff sections, letters
+ * carried over so the diagram and the capture chips always point at the same spot.
+ */
+@Composable
+private fun ApproachInputsCard(
+    liveSensors: LiveSensorState,
+    rampAngleDeg: Float?,
+    onRampAngleChange: (Float?) -> Unit,
+    landingDropM: Float?,
+    onLandingDropChange: (Float?) -> Unit
+) {
     DiagramCard(
         instruction = "B at the ramp, C where you'd touch down",
-        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
     ) {
+        // The distance span itself is shown by the compact estimate card above (it needs the
+        // live speed); this diagram just anchors B and C.
         RampLandingProfile(
             rampAngleDeg = rampAngleDeg,
             landingDropM = landingDropM,
-            jumpDistanceM = landed?.distanceM,
+            jumpDistanceM = null,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(92.dp)
+                .height(72.dp)
         )
     }
 
@@ -591,25 +630,6 @@ private fun ApproachCheckCard(
             liveSensors = liveSensors,
             valueDeg = rampAngleDeg,
             onValueChange = onRampAngleChange
-        )
-    }
-
-    when {
-        speed == null -> NoticeCard("Waiting for a live GPS speed reading.")
-        angle == null -> NoticeCard("Measure the ramp angle above to see the estimate.")
-        drop == null -> NoticeCard("Measure the landing drop above to see the estimate.")
-        result is Physics.JumpResult.ShortOfLanding -> NoticeCard(
-            "You would not clear it at your current speed (${formatValue(speed, 0)} km/h).",
-            isError = true
-        )
-        landed != null -> ResultCard(
-            primaryLabel = "ESTIMATED DISTANCE",
-            primaryValue = formatValue(landed.distanceM),
-            primaryUnit = "m",
-            secondary = listOf(
-                "At current speed" to "${formatValue(speed, 0)} km/h",
-                "Air time" to "${formatValue(landed.airTimeSec, 2)} s"
-            )
         )
     }
 }
@@ -861,7 +881,7 @@ private fun RunStats(samples: List<RunSample>, useDistance: Boolean) {
 
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         if (useDistance) {
             ReadoutTile(
@@ -893,7 +913,7 @@ private fun RunStats(samples: List<RunSample>, useDistance: Boolean) {
 private fun ScrubReadout(sample: RunSample, useDistance: Boolean) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         ReadoutTile(label = "ALTITUDE", value = formatValue(sample.altitudeM), unit = "m", modifier = Modifier.weight(1f))
         if (useDistance) {
@@ -912,24 +932,5 @@ private fun ScrubReadout(sample: RunSample, useDistance: Boolean) {
         } else {
             ReadoutTile(label = "AT", value = formatValue(sample.elapsedSec, 0), unit = "s", modifier = Modifier.weight(1f))
         }
-    }
-}
-
-@Composable
-private fun AxisLabels(minValue: Float, maxValue: Float, unit: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(
-            text = "min ${formatValue(minValue)} $unit",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            text = "max ${formatValue(maxValue)} $unit",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
     }
 }
