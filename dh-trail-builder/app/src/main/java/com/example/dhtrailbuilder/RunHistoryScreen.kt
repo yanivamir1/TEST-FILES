@@ -173,7 +173,12 @@ private fun RunDetail(
         }
 
         if (run.mode == RecordMode.Gps) {
-            SectionCard(title = "Jump", subtitle = "Landing drop B→C and ramp angle") {
+            SectionCard(title = "Jump") {
+                Text(
+                    text = "Landing drop B→C",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 SteppedValueRow(
                     value = dropText,
                     onValueChange = {
@@ -182,6 +187,11 @@ private fun RunDetail(
                     },
                     step = 0.5f,
                     unit = "m"
+                )
+                Text(
+                    text = "Ramp angle",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 SteppedValueRow(
                     value = angleText,

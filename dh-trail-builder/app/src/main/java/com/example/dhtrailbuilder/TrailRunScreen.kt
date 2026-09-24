@@ -788,23 +788,26 @@ private fun RunStats(samples: List<RunSample>, useDistance: Boolean) {
     ) {
         if (useDistance) {
             ReadoutTile(
+                modifier = Modifier.weight(1f),
                 label = "TOP SPEED",
                 value = formatValue(samples.maxOf { it.speedKmh ?: 0f }),
                 unit = "km/h"
             )
             ReadoutTile(
+                modifier = Modifier.weight(1f),
                 label = "DISTANCE",
                 value = formatValue(samples.last().cumulativeDistanceM ?: 0f, 0),
                 unit = "m"
             )
         } else {
             ReadoutTile(
+                modifier = Modifier.weight(1f),
                 label = "DURATION",
                 value = formatValue(samples.last().elapsedSec, 0),
                 unit = "s"
             )
         }
-        ReadoutTile(label = "ELEVATION RANGE", value = formatValue(gain), unit = "m")
+        ReadoutTile(label = "HEIGHT", value = formatValue(gain), unit = "m", modifier = Modifier.weight(1f))
     }
 }
 
@@ -815,20 +818,22 @@ private fun ScrubReadout(sample: RunSample, useDistance: Boolean) {
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        ReadoutTile(label = "ALTITUDE", value = formatValue(sample.altitudeM), unit = "m")
+        ReadoutTile(label = "ALTITUDE", value = formatValue(sample.altitudeM), unit = "m", modifier = Modifier.weight(1f))
         if (useDistance) {
             ReadoutTile(
+                modifier = Modifier.weight(1f),
                 label = "SPEED",
                 value = formatValue(sample.speedKmh ?: 0f),
                 unit = "km/h"
             )
             ReadoutTile(
+                modifier = Modifier.weight(1f),
                 label = "AT",
                 value = formatValue(sample.cumulativeDistanceM ?: 0f, 0),
                 unit = "m"
             )
         } else {
-            ReadoutTile(label = "AT", value = formatValue(sample.elapsedSec, 0), unit = "s")
+            ReadoutTile(label = "AT", value = formatValue(sample.elapsedSec, 0), unit = "s", modifier = Modifier.weight(1f))
         }
     }
 }
