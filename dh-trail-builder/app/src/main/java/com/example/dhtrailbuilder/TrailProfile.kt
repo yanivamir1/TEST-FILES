@@ -176,8 +176,8 @@ fun RampLandingProfile(
             )
         }
 
-        drawPointMarker(measurer, lip, "∠", rampAngleDeg != null, 0f, accent, dim)
-        drawPointMarker(measurer, landing, "B", landingDropM != null, 0f, accent, dim)
+        drawPointMarker(measurer, lip, "B", rampAngleDeg != null, 0f, accent, dim)
+        drawPointMarker(measurer, landing, "C", landingDropM != null, 0f, accent, dim)
     }
 }
 
