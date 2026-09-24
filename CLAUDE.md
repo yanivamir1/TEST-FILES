@@ -55,3 +55,24 @@ app has been installed on the phone with an unpinned (randomly-keyed) build, the
 build that adds this fix will itself conflict with that already-installed copy once, and
 the phone will need one manual uninstall to resync. After that one-time reset, every future
 build updates cleanly.
+
+## Android apps: every Text needs an explicit light color
+
+The design system is dark-background-by-default (see the design-inspiration skill). A
+`Text()` placed inside a `Card`-based component (`SectionCard`, `DiagramCard`, `ResultCard`,
+`NoticeCard`, a plain Material3 `Button`/`TextButton`) is fine without an explicit `color` -
+`Card`/`Button` set `LocalContentColor` for their whole subtree via `contentColorFor(...)`,
+which resolves correctly against this app's color scheme.
+
+A `Text()` placed directly inside a bare `Row`/`Column`/`Box` that is **not** itself inside
+one of those - a persistent bar, a custom chip, anything built straight on `Modifier`
+without a Material3 container - has no such fallback. Compose's default text color there is
+black, invisible on a black background. This bit the top `LiveSensorBar` altitude/tilt
+readout once already (fixed by adding `color = MaterialTheme.colorScheme.onSurface`
+explicitly).
+
+**Rule:** any new `Text()` (or `BasicTextField` `textStyle`, or Canvas `drawText`) not
+nested inside a `Card`/`Button`/`SectionCard`/etc. must set its color explicitly -
+`MaterialTheme.colorScheme.onSurface` for primary text, `onSurfaceVariant` for secondary/
+muted text. Never rely on the default. When adding a new top-level bar, chip, or overlay,
+check this before considering the change done.
