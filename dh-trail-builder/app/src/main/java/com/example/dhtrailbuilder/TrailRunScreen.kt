@@ -197,7 +197,9 @@ fun TrailRunScreen(
                 mode = mode,
                 samples = samples.toList(),
                 detectedJump = detectedJump,
-                predictedDistanceM = predictedJump?.distanceM
+                predictedDistanceM = predictedJump?.distanceM,
+                rampAngleDeg = approachRampAngleDeg,
+                landingDropM = approachLandingDropM
             )
             scope.launch { runStorage.saveRun(run) }
         }
@@ -286,7 +288,9 @@ fun TrailRunScreen(
             mode = mode,
             detectedJump = detectedJump,
             predictedDistanceM = predictedJump?.distanceM,
-            showComparison = !isRecording
+            showComparison = !isRecording,
+            rampAngleDeg = approachRampAngleDeg,
+            landingDropM = approachLandingDropM
         )
     }
 }
@@ -300,7 +304,9 @@ fun RunResultsSection(
     detectedJump: JumpEvent?,
     predictedDistanceM: Float?,
     modifier: Modifier = Modifier,
-    showComparison: Boolean = true
+    showComparison: Boolean = true,
+    rampAngleDeg: Float? = null,
+    landingDropM: Float? = null
 ) {
     if (samples.size < 2) return
 
@@ -310,6 +316,9 @@ fun RunResultsSection(
     }
     val takeoffSample = detectedJump?.let { nearestSample(samples, it.takeoffAtMs) }
     val landingSample = detectedJump?.let { nearestSample(samples, it.landingAtMs) }
+    val peakSample = if (useDistance) samples.maxByOrNull { it.speedKmh ?: 0f } else null
+    val brakeSample = if (useDistance) brakingPoint(samples) else null
+    fun xOf(sample: RunSample) = if (useDistance) sample.cumulativeDistanceM ?: 0f else sample.elapsedSec
 
     var userScrubIndex by remember { mutableStateOf<Int?>(null) }
     val scrubIndex = (userScrubIndex ?: samples.lastIndex).coerceIn(0, samples.lastIndex)
@@ -330,8 +339,9 @@ fun RunResultsSection(
                 landing = landingSample?.let {
                     JumpMarker(if (useDistance) it.cumulativeDistanceM ?: 0f else it.elapsedSec, it.altitudeM)
                 },
-                cursor = (if (useDistance) scrubSample.cumulativeDistanceM ?: 0f else scrubSample.elapsedSec) to
-                    scrubSample.altitudeM,
+                cursor = xOf(scrubSample) to scrubSample.altitudeM,
+                peakSpeed = peakSample?.let { JumpMarker(xOf(it), it.altitudeM) },
+                braking = brakeSample?.let { JumpMarker(xOf(it), it.altitudeM) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(130.dp)
@@ -341,6 +351,9 @@ fun RunResultsSection(
                 maxValue = samples.maxOf { it.altitudeM },
                 unit = "m"
             )
+            if (peakSample != null) {
+                MarkerLegend(showBraking = brakeSample != null)
+            }
 
             ScrubReadout(sample = scrubSample, useDistance = useDistance)
             Slider(
@@ -348,6 +361,16 @@ fun RunResultsSection(
                 onValueChange = { userScrubIndex = it.roundToInt() },
                 valueRange = 0f..samples.lastIndex.toFloat().coerceAtLeast(0f),
                 steps = (samples.size - 2).coerceAtLeast(0)
+            )
+        }
+
+        if (showComparison && useDistance) {
+            PotentialJumpCard(
+                peak = peakSample,
+                braking = brakeSample,
+                cursor = scrubSample,
+                rampAngleDeg = rampAngleDeg,
+                landingDropM = landingDropM
             )
         }
 
@@ -526,6 +549,104 @@ private fun ApproachCheckCard(
     }
 }
 
+/**
+ * Looking back at a recorded run: how far the jump set up in Approach check (ramp angle B,
+ * landing drop C) would have gone at the speeds actually ridden - the top speed, the speed
+ * right before the hardest braking, and whatever point the slider is on. Works with the phone
+ * in a pocket, since it only needs the GPS speed, not the free-fall detection.
+ */
+@Composable
+private fun PotentialJumpCard(
+    peak: RunSample?,
+    braking: RunSample?,
+    cursor: RunSample,
+    rampAngleDeg: Float?,
+    landingDropM: Float?
+) {
+    val peakSpeed = peak?.speedKmh
+    if (rampAngleDeg == null || landingDropM == null) {
+        NoticeCard(
+            "Set the landing drop and ramp angle to see how far you could have jumped at the " +
+                "speeds in this run."
+        )
+        return
+    }
+    if (peakSpeed == null || peakSpeed <= 0f) {
+        NoticeCard("No GPS speed in this run, so there is nothing to estimate from.")
+        return
+    }
+
+    fun estimate(speedKmh: Float): String =
+        when (val result = Physics.computeJump(speedKmh / 3.6f, rampAngleDeg, landingDropM)) {
+            is Physics.JumpResult.Landed -> "${formatValue(result.distanceM)} m"
+            is Physics.JumpResult.ShortOfLanding -> "short"
+        }
+
+    val peakResult = Physics.computeJump(peakSpeed / 3.6f, rampAngleDeg, landingDropM)
+    val secondary = mutableListOf("Top speed" to "${formatValue(peakSpeed, 0)} km/h")
+    braking?.speedKmh?.let { speed ->
+        secondary.add("Before braking ${formatValue(speed, 0)} km/h" to estimate(speed))
+    }
+    cursor.speedKmh?.let { speed ->
+        secondary.add("At slider ${formatValue(speed, 0)} km/h" to estimate(speed))
+    }
+
+    when (peakResult) {
+        is Physics.JumpResult.Landed -> ResultCard(
+            primaryLabel = "YOU COULD HAVE JUMPED",
+            primaryValue = formatValue(peakResult.distanceM),
+            primaryUnit = "m",
+            secondary = secondary + ("Air time" to "${formatValue(peakResult.airTimeSec, 2)} s")
+        )
+        is Physics.JumpResult.ShortOfLanding -> NoticeCard(
+            "Even at your top speed (${formatValue(peakSpeed, 0)} km/h) you would not have " +
+                "cleared this landing.",
+            isError = true
+        )
+    }
+}
+
+/** Colour key for the V (top speed) and ! (braking) markers on the trail profile. */
+@Composable
+private fun MarkerLegend(showBraking: Boolean) {
+    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        Text(
+            text = "V top speed",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.secondary
+        )
+        if (showBraking) {
+            Text(
+                text = "! braking",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+    }
+}
+
+/**
+ * Where braking started: the sample with the biggest speed loss over the next ~3 readings
+ * (GPS reports about once a second). Only counts a loss of more than 3 km/h, so a steady run
+ * shows no braking point at all.
+ */
+private fun brakingPoint(samples: List<RunSample>): RunSample? {
+    var best: RunSample? = null
+    var biggestDrop = 3f
+    for (i in 0 until samples.size - 1) {
+        val speed = samples[i].speedKmh ?: continue
+        val lowestAfter = samples.subList(i + 1, minOf(i + 4, samples.size))
+            .mapNotNull { it.speedKmh }
+            .minOrNull() ?: continue
+        val drop = speed - lowestAfter
+        if (drop > biggestDrop) {
+            biggestDrop = drop
+            best = samples[i]
+        }
+    }
+    return best
+}
+
 private fun nearestSample(samples: List<RunSample>, atMs: Long): RunSample? =
     samples.minByOrNull { abs(it.timestampMs - atMs) }
 
@@ -614,9 +735,9 @@ private fun JumpComparisonCard(
 ) {
     if (detectedJump == null || takeoff == null || landing == null) {
         NoticeCard(
-            "No jump detected in this recording. The phone has to be mounted on the bike (a " +
-                "pocket picks up your body, not the bike) and the hop has to be long enough to " +
-                "register as free-fall."
+            "No airborne moment detected - that needs the phone mounted on the bike, a pocket " +
+                "picks up your body." +
+                if (useDistance) " The estimate above comes from your speed and works either way." else ""
         )
         return
     }

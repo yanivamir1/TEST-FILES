@@ -52,7 +52,15 @@ fun RunHistoryScreen(
 
     val current = selected
     if (current != null) {
-        RunDetail(run = current, onBack = { selected = null }, modifier = modifier)
+        RunDetail(
+            run = current,
+            onBack = { selected = null },
+            onRunChange = { updated ->
+                selected = updated
+                scope.launch { runStorage.saveRun(updated) }
+            },
+            modifier = modifier
+        )
         return
     }
 
@@ -137,8 +145,12 @@ private fun summaryLine(summary: RunSummary): String {
 private fun RunDetail(
     run: SavedRun,
     onBack: () -> Unit,
+    onRunChange: (SavedRun) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var dropText by remember(run.id) { mutableStateOf(run.landingDropM?.let { formatValue(it) } ?: "") }
+    var angleText by remember(run.id) { mutableStateOf(run.rampAngleDeg?.let { formatValue(it, 0) } ?: "") }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -159,11 +171,37 @@ private fun RunDetail(
             )
         }
 
+        if (run.mode == RecordMode.Gps) {
+            SectionCard(title = "Jump", subtitle = "Landing drop B→C and ramp angle") {
+                SteppedValueRow(
+                    value = dropText,
+                    onValueChange = {
+                        dropText = it
+                        onRunChange(run.copy(landingDropM = it.toFloatOrNull()))
+                    },
+                    step = 0.5f,
+                    unit = "m"
+                )
+                SteppedValueRow(
+                    value = angleText,
+                    onValueChange = {
+                        angleText = it
+                        onRunChange(run.copy(rampAngleDeg = it.toFloatOrNull()))
+                    },
+                    step = 1f,
+                    unit = "°",
+                    decimals = 0
+                )
+            }
+        }
+
         RunResultsSection(
             samples = run.samples,
             mode = run.mode,
             detectedJump = run.detectedJump,
-            predictedDistanceM = run.predictedDistanceM
+            predictedDistanceM = run.predictedDistanceM,
+            rampAngleDeg = run.rampAngleDeg,
+            landingDropM = run.landingDropM
         )
     }
 }

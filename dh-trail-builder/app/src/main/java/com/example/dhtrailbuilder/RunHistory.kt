@@ -19,7 +19,11 @@ data class SavedRun(
     val mode: RecordMode,
     val samples: List<RunSample>,
     val detectedJump: JumpEvent?,
-    val predictedDistanceM: Float?
+    val predictedDistanceM: Float?,
+    // The jump the run was ridden against, so the "could have jumped" estimate can be
+    // recomputed from the recorded speed later on.
+    val rampAngleDeg: Float? = null,
+    val landingDropM: Float? = null
 )
 
 /** The lightweight header shown in the run list, without holding every sample in memory. */
@@ -72,6 +76,8 @@ private fun SavedRun.toJson(): JSONObject = JSONObject().apply {
     put("startedAtMs", startedAtMs)
     put("mode", mode.name)
     put("predictedDistanceM", predictedDistanceM?.toDouble() ?: JSONObject.NULL)
+    put("rampAngleDeg", rampAngleDeg?.toDouble() ?: JSONObject.NULL)
+    put("landingDropM", landingDropM?.toDouble() ?: JSONObject.NULL)
     put("takeoffAtMs", detectedJump?.takeoffAtMs ?: JSONObject.NULL)
     put("landingAtMs", detectedJump?.landingAtMs ?: JSONObject.NULL)
     put(
@@ -117,6 +123,11 @@ private fun String.toSavedRun(): SavedRun {
             null
         } else {
             json.getDouble("predictedDistanceM").toFloat()
-        }
+        },
+        rampAngleDeg = json.optionalFloat("rampAngleDeg"),
+        landingDropM = json.optionalFloat("landingDropM")
     )
 }
+
+private fun JSONObject.optionalFloat(key: String): Float? =
+    if (!has(key) || isNull(key)) null else getDouble(key).toFloat()

@@ -27,7 +27,9 @@ fun RideProfileChart(
     modifier: Modifier = Modifier,
     takeoff: JumpMarker? = null,
     landing: JumpMarker? = null,
-    cursor: Pair<Float, Float>? = null
+    cursor: Pair<Float, Float>? = null,
+    peakSpeed: JumpMarker? = null,
+    braking: JumpMarker? = null
 ) {
     val measurer = rememberTextMeasurer()
     val accent = MaterialTheme.colorScheme.primary
@@ -35,6 +37,8 @@ fun RideProfileChart(
     val cursorColor = MaterialTheme.colorScheme.secondary
     val onCursorColor = MaterialTheme.colorScheme.onSecondary
     val gridColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val brakeColor = MaterialTheme.colorScheme.error
+    val onBrakeColor = MaterialTheme.colorScheme.onError
 
     Canvas(modifier = modifier) {
         val gridLines = 4
@@ -100,6 +104,13 @@ fun RideProfileChart(
 
             drawMarker(measurer, takeoffPoint, "T", accent, onAccent)
             drawMarker(measurer, landingPoint, "L", accent, onAccent)
+        }
+
+        peakSpeed?.let {
+            drawMarker(measurer, toOffset(it.x, it.altitudeM), "V", cursorColor, onCursorColor, radius = 12f)
+        }
+        braking?.let {
+            drawMarker(measurer, toOffset(it.x, it.altitudeM), "!", brakeColor, onBrakeColor, radius = 12f)
         }
 
         cursor?.let { (x, altitude) ->
