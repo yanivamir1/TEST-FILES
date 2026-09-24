@@ -129,6 +129,58 @@ fun TrailProfile(
     }
 }
 
+/**
+ * Just the ramp and the landing - no roll-in - for places that only need to show where the
+ * angle and landing-drop captures apply, not the whole trail.
+ */
+@OptIn(ExperimentalTextApi::class)
+@Composable
+fun RampLandingProfile(
+    rampAngleDeg: Float?,
+    landingDropM: Float?,
+    modifier: Modifier = Modifier
+) {
+    val measurer = rememberTextMeasurer()
+    val accent = MaterialTheme.colorScheme.primary
+    val dim = MaterialTheme.colorScheme.onSurfaceVariant
+
+    val spec = tween<Float>(durationMillis = 300)
+    val landingY by animateFloatAsState(
+        if ((landingDropM ?: 0f) < 0f) LandingUpY else LandingDownY, spec, label = "landingY"
+    )
+
+    Canvas(modifier = modifier) {
+        val kickStart = point(KickStart)
+        val lip = point(Lip)
+        val landing = Offset(LandingX * size.width, landingY * size.height)
+
+        val rampColor = if (rampAngleDeg != null) accent else dim
+        val rampPath = Path().apply {
+            moveTo(kickStart.x, kickStart.y)
+            quadraticBezierTo(
+                point(Offset(0.44f, 0.62f)).x, point(Offset(0.44f, 0.62f)).y,
+                lip.x, lip.y
+            )
+        }
+        fillUnder(rampPath, lip.x, rampColor, if (rampAngleDeg != null) 1f else 0f)
+        drawPath(rampPath, rampColor, style = Stroke(width = 5f))
+
+        drawLandingSlope(landing, if (landingDropM != null) accent else dim, if (landingDropM != null) 1f else 0f)
+        drawFlightArc(lip, landing, dim)
+
+        rampAngleDeg?.let { angle ->
+            drawLabel(
+                measurer, "${formatValue(angle)}°",
+                Offset(lip.x + 10f, kickStart.y - 30f),
+                accent, 14.sp
+            )
+        }
+
+        drawPointMarker(measurer, lip, "∠", rampAngleDeg != null, 0f, accent, dim)
+        drawPointMarker(measurer, landing, "B", landingDropM != null, 0f, accent, dim)
+    }
+}
+
 private fun DrawScope.point(p: Offset) = Offset(p.x * size.width, p.y * size.height)
 
 private fun DrawScope.drawTakeoff(color: Color, glow: Float) {

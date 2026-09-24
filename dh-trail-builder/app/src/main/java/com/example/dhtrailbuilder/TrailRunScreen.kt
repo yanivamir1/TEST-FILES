@@ -78,6 +78,7 @@ fun TrailRunScreen(
     var approachPeakAltitudeM by remember { mutableStateOf<Float?>(null) }
     var approachLipAltitudeM by remember { mutableStateOf<Float?>(null) }
     var approachLandingDropM by remember { mutableStateOf<Float?>(null) }
+    var approachRampAngleDeg by remember { mutableStateOf(rampAngleDeg) }
 
     fun resetApproachCheck() {
         approachPeakSpeedKmh = null
@@ -231,7 +232,8 @@ fun TrailRunScreen(
         if (!isRecording) {
             ApproachCheckCard(
                 liveSensors = liveSensors,
-                rampAngleDeg = rampAngleDeg,
+                rampAngleDeg = approachRampAngleDeg,
+                onRampAngleChange = { approachRampAngleDeg = it },
                 peakSpeedKmh = approachPeakSpeedKmh,
                 peakAltitudeM = approachPeakAltitudeM,
                 lipAltitudeM = approachLipAltitudeM,
@@ -404,13 +406,15 @@ private fun LiveSpeedCard(currentKmh: Float?, maxKmh30s: Float) {
 /**
  * The pre-jump test: ride the approach, slow to a stop instead of hitting the lip, and see
  * whether you'd have cleared it. The peak speed and the altitude at that instant are captured
- * automatically (see trackSpeed in the caller) - "Capture at lip" and the landing measurement
- * below are the only manual taps needed.
+ * automatically (see trackSpeed in the caller). Structured like the Jump tab - a pinned diagram,
+ * then Approach / Takeoff / Landing - so the ramp angle can be (re)measured right here instead
+ * of only ever coming from the Jump tab.
  */
 @Composable
 private fun ApproachCheckCard(
     liveSensors: LiveSensorState,
     rampAngleDeg: Float?,
+    onRampAngleChange: (Float?) -> Unit,
     peakSpeedKmh: Float?,
     peakAltitudeM: Float?,
     lipAltitudeM: Float?,
@@ -425,8 +429,21 @@ private fun ApproachCheckCard(
         null
     }
 
+    DiagramCard(
+        instruction = "∠ at the lip, B where you'd touch down",
+        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+    ) {
+        RampLandingProfile(
+            rampAngleDeg = rampAngleDeg,
+            landingDropM = landingDropM,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(92.dp)
+        )
+    }
+
     SectionCard(
-        title = "Approach check",
+        title = "Approach",
         subtitle = "Ride down, slow to a stop before the lip - see if you'd have cleared it"
     ) {
         Row(
@@ -457,83 +474,100 @@ private fun ApproachCheckCard(
             )
             TextButton(onClick = onReset) { Text("Reset") }
         }
+    }
 
+    SectionCard(title = "Takeoff") {
+        AngleMeasureInput(
+            label = "Ramp angle",
+            hint = "Phone on the ramp face, length pointing down the slope",
+            liveSensors = liveSensors,
+            valueDeg = rampAngleDeg,
+            onValueChange = onRampAngleChange
+        )
+    }
+
+    SectionCard(title = "Landing") {
         ElevationDeltaInput(
-            label = "Landing (lip to touchdown)",
-            hint = "A at the lip, B where you touch down.",
+            label = "Drop to the landing",
+            hint = if (lipAltitudeM != null) {
+                "The lip is already set from the capture above - just capture where you touch down."
+            } else {
+                "∠ at the lip, B where you touch down."
+            },
             liveSensors = liveSensors,
             valueMeters = landingDropM,
             onValueChange = onLandingDropChange,
             presetPointA = lipAltitudeM,
             presetPointACaption = "lip, captured",
             pointALabel = "lip",
-            pointBLabel = "landing"
+            pointBLabel = "landing",
+            letterA = "∠",
+            letterB = "B"
         )
+    }
 
-        val speed = peakSpeedKmh
-        val angle = rampAngleDeg
-        val drop = landingDropM
+    val speed = peakSpeedKmh
+    val angle = rampAngleDeg
+    val drop = landingDropM
 
-        when {
-            speed == null -> NoticeCard(
-                "Ride down and reach your approach speed - it's captured automatically."
+    when {
+        speed == null -> NoticeCard(
+            "Ride down and reach your approach speed - it's captured automatically."
+        )
+        angle == null -> NoticeCard(
+            "Measure the ramp angle above to see the estimate."
+        )
+        drop == null -> NoticeCard(
+            "Measure the landing drop above to see the estimate."
+        )
+        else -> {
+            val speedMs = speed / 3.6f
+            val naiveResult = Physics.computeJump(speedMs, angle, drop)
+
+            Text(
+                text = "IF YOU'D KEPT YOUR SPEED (${formatValue(speed, 0)} km/h)",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            angle == null -> NoticeCard(
-                "Measure the ramp angle on the Jump tab first.",
-                isError = true
-            )
-            drop == null -> NoticeCard(
-                "Measure the landing drop above to see the estimate."
-            )
-            else -> {
-                val speedMs = speed / 3.6f
-                val naiveResult = Physics.computeJump(speedMs, angle, drop)
+            when (naiveResult) {
+                is Physics.JumpResult.ShortOfLanding -> NoticeCard(
+                    "You would not have cleared it at that speed alone.",
+                    isError = true
+                )
+                is Physics.JumpResult.Landed -> ResultCard(
+                    primaryLabel = "DISTANCE AT THAT SPEED",
+                    primaryValue = formatValue(naiveResult.distanceM),
+                    primaryUnit = "m",
+                    secondary = listOf("Air time" to "${formatValue(naiveResult.airTimeSec, 2)} s")
+                )
+            }
+
+            if (dropToLip != null) {
+                val potentialLipSpeedMs = Physics.lipSpeed(speedMs, dropToLip)
+                val potentialResult = Physics.computeJump(potentialLipSpeedMs, angle, drop)
 
                 Text(
-                    text = "IF YOU'D KEPT YOUR SPEED (${formatValue(speed, 0)} km/h)",
+                    text = "IF YOU HAD CONTINUED TO THE LIP",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                when (naiveResult) {
+                when (potentialResult) {
                     is Physics.JumpResult.ShortOfLanding -> NoticeCard(
-                        "You would not have cleared it at that speed alone.",
+                        "Even continuing to the lip, you would not have cleared it.",
                         isError = true
                     )
                     is Physics.JumpResult.Landed -> ResultCard(
-                        primaryLabel = "DISTANCE AT THAT SPEED",
-                        primaryValue = formatValue(naiveResult.distanceM),
+                        primaryLabel = "POTENTIAL DISTANCE",
+                        primaryValue = formatValue(potentialResult.distanceM),
                         primaryUnit = "m",
-                        secondary = listOf("Air time" to "${formatValue(naiveResult.airTimeSec, 2)} s")
+                        secondary = listOf(
+                            "Potential lip speed" to "${formatValue(potentialLipSpeedMs * 3.6f, 0)} km/h",
+                            "Air time" to "${formatValue(potentialResult.airTimeSec, 2)} s"
+                        )
                     )
                 }
-
-                if (dropToLip != null) {
-                    val potentialLipSpeedMs = Physics.lipSpeed(speedMs, dropToLip)
-                    val potentialResult = Physics.computeJump(potentialLipSpeedMs, angle, drop)
-
-                    Text(
-                        text = "IF YOU HAD CONTINUED TO THE LIP",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    when (potentialResult) {
-                        is Physics.JumpResult.ShortOfLanding -> NoticeCard(
-                            "Even continuing to the lip, you would not have cleared it.",
-                            isError = true
-                        )
-                        is Physics.JumpResult.Landed -> ResultCard(
-                            primaryLabel = "POTENTIAL DISTANCE",
-                            primaryValue = formatValue(potentialResult.distanceM),
-                            primaryUnit = "m",
-                            secondary = listOf(
-                                "Potential lip speed" to "${formatValue(potentialLipSpeedMs * 3.6f, 0)} km/h",
-                                "Air time" to "${formatValue(potentialResult.airTimeSec, 2)} s"
-                            )
-                        )
-                    }
-                } else {
-                    NoticeCard("Capture at the lip too, to see the potential-speed estimate.")
-                }
+            } else {
+                NoticeCard("Capture at the lip too, to see the potential-speed estimate.")
             }
         }
     }
