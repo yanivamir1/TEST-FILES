@@ -76,6 +76,7 @@ private fun AppRoot(
     var currentScreen by remember { mutableStateOf(Screen.Jump) }
     var lastJumpResult by remember { mutableStateOf<JumpScreenResult?>(null) }
     var landingAltitudeM by remember { mutableStateOf<Float?>(null) }
+    var rampAngleDeg by remember { mutableStateOf<Float?>(null) }
 
     var hasLocationPermission by remember {
         mutableStateOf(
@@ -125,7 +126,8 @@ private fun AppRoot(
             Screen.Jump -> JumpCalculatorScreen(
                 liveSensors = liveSensors,
                 onResult = { lastJumpResult = it },
-                onLandingAltitudeCaptured = { landingAltitudeM = it }
+                onLandingAltitudeCaptured = { landingAltitudeM = it },
+                onRampAngleCaptured = { rampAngleDeg = it }
             )
             Screen.Berm -> BermDistanceScreen(
                 liveSensors = liveSensors,
@@ -141,7 +143,8 @@ private fun AppRoot(
                 onRequestPermission = {
                     permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
                 },
-                predictedJump = lastJumpResult
+                predictedJump = lastJumpResult,
+                rampAngleDeg = rampAngleDeg
             )
             Screen.History -> RunHistoryScreen(runStorage = runStorage)
         }

@@ -24,6 +24,7 @@ fun JumpCalculatorScreen(
     liveSensors: LiveSensorState,
     onResult: (JumpScreenResult) -> Unit,
     onLandingAltitudeCaptured: (Float) -> Unit,
+    onRampAngleCaptured: (Float?) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var startSpeedText by remember { mutableStateOf("0") }
@@ -111,7 +112,10 @@ fun JumpCalculatorScreen(
                     hint = TrailStep.Ramp.instruction,
                     liveSensors = liveSensors,
                     valueDeg = rampAngleDeg,
-                    onValueChange = { rampAngleDeg = it },
+                    onValueChange = {
+                        rampAngleDeg = it
+                        onRampAngleCaptured(it)
+                    },
                     onInteract = { activeStep = TrailStep.Ramp }
                 )
             }

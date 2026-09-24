@@ -14,6 +14,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -54,7 +55,8 @@ fun TrailRunScreen(
     hasLocationPermission: Boolean,
     onRequestPermission: () -> Unit,
     modifier: Modifier = Modifier,
-    predictedJump: JumpScreenResult? = null
+    predictedJump: JumpScreenResult? = null,
+    rampAngleDeg: Float? = null
 ) {
     val scope = rememberCoroutineScope()
     val samples = remember { mutableStateListOf<RunSample>() }
@@ -69,13 +71,31 @@ fun TrailRunScreen(
     // The speedometer: live even before recording starts, independent of the saved run.
     var liveSpeedKmh by remember { mutableStateOf<Float?>(null) }
     var speedWindow by remember { mutableStateOf<List<Pair<Long, Float>>>(emptyList()) }
-    var speedLog by remember { mutableStateOf<List<Float>>(emptyList()) }
+
+    // The approach check: the fastest speed since the last reset, and the altitude at that
+    // exact instant, tracked automatically - see trackSpeed() below.
+    var approachPeakSpeedKmh by remember { mutableStateOf<Float?>(null) }
+    var approachPeakAltitudeM by remember { mutableStateOf<Float?>(null) }
+    var approachLipAltitudeM by remember { mutableStateOf<Float?>(null) }
+    var approachLandingDropM by remember { mutableStateOf<Float?>(null) }
+
+    fun resetApproachCheck() {
+        approachPeakSpeedKmh = null
+        approachPeakAltitudeM = null
+        approachLipAltitudeM = null
+        approachLandingDropM = null
+    }
 
     fun trackSpeed(speedKmh: Float) {
         val now = System.currentTimeMillis()
         liveSpeedKmh = speedKmh
         speedWindow = (speedWindow + (now to speedKmh)).filter { now - it.first <= 30_000L }
-        speedLog = (listOf(speedKmh) + speedLog).take(10)
+
+        val peak = approachPeakSpeedKmh
+        if (peak == null || speedKmh > peak) {
+            approachPeakSpeedKmh = speedKmh
+            approachPeakAltitudeM = liveSensors.altitudeM
+        }
     }
 
     DisposableEffect(Unit) {
@@ -205,10 +225,22 @@ fun TrailRunScreen(
     ) {
         LiveSpeedCard(
             currentKmh = liveSpeedKmh,
-            maxKmh30s = speedWindow.maxOfOrNull { it.second } ?: 0f,
-            readings = speedLog,
-            showLog = !isRecording
+            maxKmh30s = speedWindow.maxOfOrNull { it.second } ?: 0f
         )
+
+        if (!isRecording) {
+            ApproachCheckCard(
+                liveSensors = liveSensors,
+                rampAngleDeg = rampAngleDeg,
+                peakSpeedKmh = approachPeakSpeedKmh,
+                peakAltitudeM = approachPeakAltitudeM,
+                lipAltitudeM = approachLipAltitudeM,
+                onCaptureLip = { approachLipAltitudeM = liveSensors.altitudeM },
+                landingDropM = approachLandingDropM,
+                onLandingDropChange = { approachLandingDropM = it },
+                onReset = { resetApproachCheck() }
+            )
+        }
 
         if (!hasLocationPermission && mode == RecordMode.Gps) {
             SectionCard(title = "Ride log", subtitle = "Checks the calculated jump against a real run") {
@@ -346,18 +378,10 @@ fun RunResultsSection(
     }
 }
 
-/**
- * Live speed, always on regardless of recording: current reading, the fastest point in the
- * last 30 seconds, and a rolling log of the last 10 readings (oldest drops off as a new one
- * comes in) - hidden once a recording is actually running so the card stays out of the way.
- */
+/** Live speed, always on regardless of recording: current reading and the fastest point in
+ * the last 30 seconds. */
 @Composable
-private fun LiveSpeedCard(
-    currentKmh: Float?,
-    maxKmh30s: Float,
-    readings: List<Float>,
-    showLog: Boolean
-) {
+private fun LiveSpeedCard(currentKmh: Float?, maxKmh30s: Float) {
     SectionCard(title = "Live speed", subtitle = "Works even before you start recording") {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -374,20 +398,141 @@ private fun LiveSpeedCard(
                 unit = "km/h"
             )
         }
+    }
+}
 
-        if (showLog && readings.isNotEmpty()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 2.dp),
-                verticalArrangement = Arrangement.spacedBy(3.dp)
-            ) {
-                readings.forEach { reading ->
+/**
+ * The pre-jump test: ride the approach, slow to a stop instead of hitting the lip, and see
+ * whether you'd have cleared it. The peak speed and the altitude at that instant are captured
+ * automatically (see trackSpeed in the caller) - "Capture at lip" and the landing measurement
+ * below are the only manual taps needed.
+ */
+@Composable
+private fun ApproachCheckCard(
+    liveSensors: LiveSensorState,
+    rampAngleDeg: Float?,
+    peakSpeedKmh: Float?,
+    peakAltitudeM: Float?,
+    lipAltitudeM: Float?,
+    onCaptureLip: () -> Unit,
+    landingDropM: Float?,
+    onLandingDropChange: (Float?) -> Unit,
+    onReset: () -> Unit
+) {
+    val dropToLip = if (peakAltitudeM != null && lipAltitudeM != null) {
+        peakAltitudeM - lipAltitudeM
+    } else {
+        null
+    }
+
+    SectionCard(
+        title = "Approach check",
+        subtitle = "Ride down, slow to a stop before the lip - see if you'd have cleared it"
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(24.dp)
+        ) {
+            ReadoutTile(
+                label = "PEAK SPEED",
+                value = peakSpeedKmh?.let { formatValue(it, 0) } ?: "—",
+                unit = "km/h"
+            )
+            ReadoutTile(
+                label = "DROP TO LIP",
+                value = dropToLip?.let { formatValue(it) } ?: "—",
+                unit = "m"
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            PrimaryActionButton(
+                text = "Capture at lip",
+                onClick = onCaptureLip,
+                enabled = liveSensors.altitudeM != null,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(onClick = onReset) { Text("Reset") }
+        }
+
+        ElevationDeltaInput(
+            label = "Landing (lip to touchdown)",
+            hint = "A at the lip, B where you touch down.",
+            liveSensors = liveSensors,
+            valueMeters = landingDropM,
+            onValueChange = onLandingDropChange,
+            presetPointA = lipAltitudeM,
+            presetPointACaption = "lip, captured",
+            pointALabel = "lip",
+            pointBLabel = "landing"
+        )
+
+        val speed = peakSpeedKmh
+        val angle = rampAngleDeg
+        val drop = landingDropM
+
+        when {
+            speed == null -> NoticeCard(
+                "Ride down and reach your approach speed - it's captured automatically."
+            )
+            angle == null -> NoticeCard(
+                "Measure the ramp angle on the Jump tab first.",
+                isError = true
+            )
+            drop == null -> NoticeCard(
+                "Measure the landing drop above to see the estimate."
+            )
+            else -> {
+                val speedMs = speed / 3.6f
+                val naiveResult = Physics.computeJump(speedMs, angle, drop)
+
+                Text(
+                    text = "IF YOU'D KEPT YOUR SPEED (${formatValue(speed, 0)} km/h)",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                when (naiveResult) {
+                    is Physics.JumpResult.ShortOfLanding -> NoticeCard(
+                        "You would not have cleared it at that speed alone.",
+                        isError = true
+                    )
+                    is Physics.JumpResult.Landed -> ResultCard(
+                        primaryLabel = "DISTANCE AT THAT SPEED",
+                        primaryValue = formatValue(naiveResult.distanceM),
+                        primaryUnit = "m",
+                        secondary = listOf("Air time" to "${formatValue(naiveResult.airTimeSec, 2)} s")
+                    )
+                }
+
+                if (dropToLip != null) {
+                    val potentialLipSpeedMs = Physics.lipSpeed(speedMs, dropToLip)
+                    val potentialResult = Physics.computeJump(potentialLipSpeedMs, angle, drop)
+
                     Text(
-                        text = "${formatValue(reading, 0)} km/h",
+                        text = "IF YOU HAD CONTINUED TO THE LIP",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    when (potentialResult) {
+                        is Physics.JumpResult.ShortOfLanding -> NoticeCard(
+                            "Even continuing to the lip, you would not have cleared it.",
+                            isError = true
+                        )
+                        is Physics.JumpResult.Landed -> ResultCard(
+                            primaryLabel = "POTENTIAL DISTANCE",
+                            primaryValue = formatValue(potentialResult.distanceM),
+                            primaryUnit = "m",
+                            secondary = listOf(
+                                "Potential lip speed" to "${formatValue(potentialLipSpeedMs * 3.6f, 0)} km/h",
+                                "Air time" to "${formatValue(potentialResult.airTimeSec, 2)} s"
+                            )
+                        )
+                    }
+                } else {
+                    NoticeCard("Capture at the lip too, to see the potential-speed estimate.")
                 }
             }
         }
