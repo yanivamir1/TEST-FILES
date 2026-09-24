@@ -17,8 +17,8 @@ import androidx.compose.ui.unit.sp
 
 // --- Dark mode: black canvas, off-white text, muted accents used only for meaning. ---
 private val CanvasBlack = Color(0xFF0A0A0B)
-private val DarkTextPrimary = Color(0xFFECEAE6)
-private val DarkTextSecondary = Color(0xFF9A9DA3)
+private val DarkTextPrimary = Color(0xFFF7F5F1)
+private val DarkTextSecondary = Color(0xFFC4C7CC)
 
 private val CreamPrimary = Color(0xFFEDEBE6)
 private val CreamOnPrimary = Color(0xFF1B1A17)
@@ -56,8 +56,8 @@ private val DarkColors = darkColorScheme(
 
 // --- Light mode: warm ivory canvas, near-black ink, same principles inverted. ---
 private val CanvasIvory = Color(0xFFFAF9F6)
-private val LightTextPrimary = Color(0xFF1C1C1E)
-private val LightTextSecondary = Color(0xFF6B6E74)
+private val LightTextPrimary = Color(0xFF111113)
+private val LightTextSecondary = Color(0xFF45484E)
 
 private val InkPrimary = Color(0xFF1C1C1E)
 private val InkOnPrimary = Color(0xFFFAF9F6)
@@ -129,27 +129,30 @@ private val DhShapes = Shapes(
     extraLarge = RoundedCornerShape(28.dp)
 )
 
-// Sizes bumped up from stock Material3 defaults so numbers and controls stay readable in
-// bright outdoor light, not just on a dim indoor screen.
+// Sizes and weights bumped up from stock Material3 defaults so numbers and labels stay
+// readable in direct sunlight on the trail, not just on a dim indoor screen - nothing below
+// Medium weight, since thin strokes are the first thing glare washes out.
 private val BaseTypography = Typography()
 private val DhTypography = BaseTypography.copy(
-    displaySmall = BaseTypography.displaySmall.copy(fontSize = 42.sp, fontWeight = FontWeight.Light),
-    headlineSmall = BaseTypography.headlineSmall.copy(fontSize = 28.sp, fontWeight = FontWeight.Light),
-    headlineMedium = BaseTypography.headlineMedium.copy(fontWeight = FontWeight.Light),
-    titleLarge = BaseTypography.titleLarge.copy(fontSize = 22.sp, fontWeight = FontWeight.Medium),
-    titleMedium = BaseTypography.titleMedium.copy(fontSize = 18.sp, fontWeight = FontWeight.Medium),
-    bodyLarge = BaseTypography.bodyLarge.copy(fontSize = 17.sp),
-    bodyMedium = BaseTypography.bodyMedium.copy(fontSize = 16.sp),
-    bodySmall = BaseTypography.bodySmall.copy(fontSize = 14.sp),
-    labelLarge = BaseTypography.labelLarge.copy(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+    displaySmall = BaseTypography.displaySmall.copy(fontSize = 42.sp, fontWeight = FontWeight.SemiBold),
+    headlineSmall = BaseTypography.headlineSmall.copy(fontSize = 28.sp, fontWeight = FontWeight.SemiBold),
+    headlineMedium = BaseTypography.headlineMedium.copy(fontWeight = FontWeight.SemiBold),
+    titleLarge = BaseTypography.titleLarge.copy(fontSize = 22.sp, fontWeight = FontWeight.Bold),
+    titleMedium = BaseTypography.titleMedium.copy(fontSize = 18.sp, fontWeight = FontWeight.Bold),
+    bodyLarge = BaseTypography.bodyLarge.copy(fontSize = 17.sp, fontWeight = FontWeight.Medium),
+    bodyMedium = BaseTypography.bodyMedium.copy(fontSize = 16.sp, fontWeight = FontWeight.Medium),
+    bodySmall = BaseTypography.bodySmall.copy(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+    labelLarge = BaseTypography.labelLarge.copy(fontSize = 16.sp, fontWeight = FontWeight.Bold),
     labelMedium = BaseTypography.labelMedium.copy(
         fontFamily = FontFamily.Monospace,
         fontSize = 13.sp,
+        fontWeight = FontWeight.SemiBold,
         letterSpacing = 0.9.sp
     ),
     labelSmall = BaseTypography.labelSmall.copy(
         fontFamily = FontFamily.Monospace,
         fontSize = 12.sp,
+        fontWeight = FontWeight.SemiBold,
         letterSpacing = 1.1.sp
     )
 )

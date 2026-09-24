@@ -1,6 +1,12 @@
 package com.example.dhtrailbuilder
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
 import android.location.Location
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -14,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -24,10 +31,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import java.util.Locale
@@ -62,6 +72,13 @@ fun TrailRunScreen(
     rampAngleDeg: Float? = null
 ) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val view = LocalView.current
+    var keepScreenOn by remember { mutableStateOf(loadKeepScreenOn(context)) }
+    // Only asked so the "Recording" notification is visible - recording works either way.
+    val notificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
     val samples = remember { mutableStateListOf<RunSample>() }
     var mode by remember { mutableStateOf(RecordMode.Gps) }
     var isRecording by remember { mutableStateOf(false) }
@@ -86,7 +103,15 @@ fun TrailRunScreen(
     }
 
     DisposableEffect(Unit) {
-        onDispose { jobs.forEach { it.cancel() } }
+        onDispose {
+            jobs.forEach { it.cancel() }
+            RecordingService.stop(context)
+        }
+    }
+
+    DisposableEffect(isRecording, keepScreenOn) {
+        view.keepScreenOn = isRecording && keepScreenOn
+        onDispose { view.keepScreenOn = false }
     }
 
     // Ambient speed reading for the speedometer when nothing is being recorded - recording
@@ -114,6 +139,25 @@ fun TrailRunScreen(
         isRecording = true
         val startedAt = System.currentTimeMillis()
         recordingStartedAtMs = startedAt
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        // Keeps the CPU and GPS running with the screen off - see RecordingService.
+        runCatching {
+            RecordingService.start(context, useLocation = mode == RecordMode.Gps && hasLocationPermission)
+        }
+
+        // The app-wide barometer listener pauses when the app goes to the background (screen
+        // off), so the recording keeps its own feeding the same shared state.
+        val pressureJob = scope.launch {
+            sensorRepository.pressureFlow().collect { reading ->
+                if (reading is PressureReading.Value) liveSensors.pressureHpa = reading.hPa
+            }
+        }
 
         val detector = JumpDetector()
         val accelJob = scope.launch {
@@ -182,13 +226,14 @@ fun TrailRunScreen(
             }
         }
 
-        jobs = listOf(accelJob, recordJob)
+        jobs = listOf(accelJob, recordJob, pressureJob)
     }
 
     fun stopRecording() {
         jobs.forEach { it.cancel() }
         jobs = emptyList()
         isRecording = false
+        RecordingService.stop(context)
 
         if (samples.size >= 2) {
             val run = SavedRun(
@@ -263,6 +308,25 @@ fun TrailRunScreen(
                 enabled = mode == RecordMode.NoGps || hasLocationPermission,
                 modifier = Modifier.fillMaxWidth()
             )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Keep screen on while recording",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
+                )
+                Switch(
+                    checked = keepScreenOn,
+                    onCheckedChange = {
+                        keepScreenOn = it
+                        saveKeepScreenOn(context, it)
+                    }
+                )
+            }
 
             RecordingStatus(
                 isRecording = isRecording,
@@ -646,6 +710,19 @@ private fun brakingPoint(samples: List<RunSample>): RunSample? {
         }
     }
     return best
+}
+
+private const val PREFS_NAME = "dh_trail_builder_prefs"
+private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
+
+private fun loadKeepScreenOn(context: Context): Boolean =
+    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getBoolean(KEY_KEEP_SCREEN_ON, false)
+
+private fun saveKeepScreenOn(context: Context, value: Boolean) {
+    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .edit()
+        .putBoolean(KEY_KEEP_SCREEN_ON, value)
+        .apply()
 }
 
 private fun nearestSample(samples: List<RunSample>, atMs: Long): RunSample? =
