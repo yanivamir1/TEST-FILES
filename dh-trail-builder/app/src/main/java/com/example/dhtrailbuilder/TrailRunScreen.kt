@@ -279,16 +279,21 @@ fun TrailRunScreen(
         }
 
         // Once a run is stopped, its profile (with the slider and markers) comes right after
-        // the estimate - still above the fold on most phones.
-        RunResultsSection(
-            samples = samples,
-            mode = recordedMode,
-            detectedJump = detectedJump,
-            predictedDistanceM = predictedJump?.distanceM,
-            showComparison = !isRecording,
-            rampAngleDeg = approachRampAngleDeg,
-            landingDropM = approachLandingDropM
-        )
+        // the estimate - still above the fold on most phones. Hidden while still recording:
+        // samples keeps growing live, so this used to put a second, unrelated slider (the
+        // chart scrubber) on screen right next to Slide to stop - easy to grab by mistake, and
+        // there is nothing useful to scrub through yet anyway.
+        if (!isRecording) {
+            RunResultsSection(
+                samples = samples,
+                mode = recordedMode,
+                detectedJump = detectedJump,
+                predictedDistanceM = predictedJump?.distanceM,
+                showComparison = true,
+                rampAngleDeg = approachRampAngleDeg,
+                landingDropM = approachLandingDropM
+            )
+        }
 
         LiveSpeedCard(
             currentKmh = liveSpeedKmh,
