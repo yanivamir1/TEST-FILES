@@ -11,8 +11,8 @@ android {
         applicationId = "com.example.dhtrailbuilder"
         minSdk = 24
         targetSdk = 34
-        versionCode = 5
-        versionName = "v5"
+        versionCode = 6
+        versionName = "v6"
     }
 
     // CI runners are ephemeral, so the SDK's auto-generated ~/.android/debug.keystore is

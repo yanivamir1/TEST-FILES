@@ -3,7 +3,6 @@ package com.example.dhtrailbuilder
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
-import android.location.Location
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -37,7 +36,6 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -57,13 +55,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import java.util.Locale
-import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.roundToInt
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /** speedKmh and cumulativeDistanceM are absent when recording without GPS. */
@@ -96,14 +90,21 @@ fun TrailRunScreen(
     val notificationPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { }
-    val samples = remember { mutableStateListOf<RunSample>() }
-    var mode by remember { mutableStateOf(RecordMode.Gps) }
-    var isRecording by remember { mutableStateOf(false) }
-    var jobs by remember { mutableStateOf<List<Job>>(emptyList()) }
-    var detectedJump by remember { mutableStateOf<JumpEvent?>(null) }
-    var lastFix by remember { mutableStateOf<LocationSample?>(null) }
-    var elapsedSec by remember { mutableStateOf(0) }
-    var recordingStartedAtMs by remember { mutableStateOf(0L) }
+
+    // The mode selector, choosable only before Start is pressed.
+    var selectedMode by remember { mutableStateOf(RecordMode.Gps) }
+
+    // The recording itself lives in RecordingSession, not here - see its doc comment for why.
+    // This screen only reads its state and starts/stops it; a config change, the tab switching
+    // away, or this Composable being disposed for any other reason does not touch it.
+    val isRecording = RecordingSession.isRecording.value
+    val samples = RecordingSession.samples
+    val detectedJump = RecordingSession.detectedJump.value
+    val lastFix = RecordingSession.lastFix.value
+    val elapsedSec = RecordingSession.elapsedSec.value
+    // What the currently-displayed samples were actually recorded with, decoupled from
+    // selectedMode so re-picking a chip after Stop can't relabel a finished run's chart.
+    val recordedMode = RecordingSession.mode.value
 
     // The speedometer: live even before recording starts, independent of the saved run.
     var liveSpeedKmh by remember { mutableStateOf<Float?>(null) }
@@ -119,20 +120,13 @@ fun TrailRunScreen(
         speedWindow = (speedWindow + (now to speedKmh)).filter { now - it.first <= 30_000L }
     }
 
-    DisposableEffect(Unit) {
-        onDispose {
-            jobs.forEach { it.cancel() }
-            RecordingService.stop(context)
-        }
-    }
-
     DisposableEffect(isRecording, keepScreenOn) {
         view.keepScreenOn = isRecording && keepScreenOn
         onDispose { view.keepScreenOn = false }
     }
 
     // Ambient speed reading for the speedometer when nothing is being recorded - recording
-    // itself feeds trackSpeed() from its own GPS collection below instead of running a second.
+    // itself feeds trackSpeed() from RecordingSession's own GPS collection instead.
     LaunchedEffect(isRecording, hasLocationPermission) {
         if (isRecording || !hasLocationPermission) return@LaunchedEffect
         locationRepository.locationFlow()
@@ -140,17 +134,8 @@ fun TrailRunScreen(
             .collect { fix -> fix.speedKmh?.let { trackSpeed(it) } }
     }
 
-    LaunchedEffect(isRecording) {
-        if (!isRecording) return@LaunchedEffect
-        elapsedSec = 0
-        while (isActive) {
-            delay(1000)
-            elapsedSec += 1
-        }
-    }
-
     // Lets the caller lock tab switching while recording - a stray touch through fabric
-    // should not be able to navigate away and tear down the recording.
+    // should not be able to navigate away while a run is in progress.
     LaunchedEffect(isRecording) { onRecordingChanged(isRecording) }
 
     // The hardware/gesture back action is another way a pocket touch could end the screen -
@@ -158,120 +143,37 @@ fun TrailRunScreen(
     BackHandler(enabled = isRecording) { }
 
     fun startRecording() {
-        samples.clear()
-        detectedJump = null
-        lastFix = null
-        isRecording = true
-        val startedAt = System.currentTimeMillis()
-        recordingStartedAtMs = startedAt
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
         ) {
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
-        // Keeps the CPU and GPS running with the screen off - see RecordingService.
-        runCatching {
-            RecordingService.start(context, useLocation = mode == RecordMode.Gps && hasLocationPermission)
-        }
-
-        // The app-wide barometer listener pauses when the app goes to the background (screen
-        // off), so the recording keeps its own feeding the same shared state.
-        val pressureJob = scope.launch {
-            sensorRepository.pressureFlow().collect { reading ->
-                if (reading is PressureReading.Value) liveSensors.pressureHpa = reading.hPa
-            }
-        }
-
-        val detector = JumpDetector()
-        val accelJob = scope.launch {
-            sensorRepository.accelerationMagnitudeFlow().collect { magnitude ->
-                val event = detector.onSample(magnitude, System.currentTimeMillis())
-                if (event != null) detectedJump = event
-            }
-        }
-
-        val recordJob = if (mode == RecordMode.Gps) {
-            scope.launch {
-                var lastLat: Double? = null
-                var lastLon: Double? = null
-                var cumulativeDistance = 0f
-
-                locationRepository.locationFlow().collect { fix ->
-                    lastFix = fix
-                    val lat = fix.latitude
-                    val lon = fix.longitude
-                    // The barometer is what the rest of the app measures and calibrates against -
-                    // GPS altitude is a different reference and commonly tens of meters off.
-                    // Fall back to it only when there is no barometer at all.
-                    val altitude = liveSensors.altitudeM ?: fix.altitudeMeters
-                    if (lat == null || lon == null || altitude == null) return@collect
-
-                    val prevLat = lastLat
-                    val prevLon = lastLon
-                    if (prevLat != null && prevLon != null) {
-                        val results = FloatArray(1)
-                        Location.distanceBetween(prevLat, prevLon, lat, lon, results)
-                        cumulativeDistance += results[0]
-                    }
-                    lastLat = lat
-                    lastLon = lon
-
-                    val now = System.currentTimeMillis()
-                    // A fix without a speed means standing still, not a useless fix.
-                    val speed = fix.speedKmh ?: 0f
-                    trackSpeed(speed)
-                    samples.add(
-                        RunSample(
-                            timestampMs = now,
-                            elapsedSec = (now - startedAt) / 1000f,
-                            altitudeM = altitude,
-                            speedKmh = speed,
-                            cumulativeDistanceM = cumulativeDistance
-                        )
-                    )
-                }
-            }
-        } else {
-            scope.launch {
-                while (isActive) {
-                    liveSensors.altitudeM?.let { altitude ->
-                        val now = System.currentTimeMillis()
-                        samples.add(
-                            RunSample(
-                                timestampMs = now,
-                                elapsedSec = (now - startedAt) / 1000f,
-                                altitudeM = altitude
-                            )
-                        )
-                    }
-                    delay(500)
-                }
-            }
-        }
-
-        jobs = listOf(accelJob, recordJob, pressureJob)
+        RecordingSession.start(
+            context = context,
+            mode = selectedMode,
+            sensorRepository = sensorRepository,
+            locationRepository = locationRepository,
+            liveSensors = liveSensors,
+            runStorage = runStorage,
+            hasLocationPermission = hasLocationPermission,
+            onSpeedSample = ::trackSpeed
+        )
     }
 
     fun stopRecording() {
-        jobs.forEach { it.cancel() }
-        jobs = emptyList()
-        isRecording = false
-        RecordingService.stop(context)
-
-        if (samples.size >= 2) {
-            val run = SavedRun(
-                id = UUID.randomUUID().toString(),
-                startedAtMs = recordingStartedAtMs,
-                mode = mode,
-                samples = samples.toList(),
-                detectedJump = detectedJump,
-                predictedDistanceM = predictedJump?.distanceM,
+        RecordingSession.stop(context)
+        val finishedSamples = RecordingSession.samples
+        if (finishedSamples.size >= 2) {
+            val run = RecordingSession.snapshotForSave(
                 rampAngleDeg = approachRampAngleDeg,
-                landingDropM = approachLandingDropM
+                landingDropM = approachLandingDropM,
+                predictedDistanceM = predictedJump?.distanceM
             )
-            scope.launch { runStorage.saveRun(run) }
+            scope.launch {
+                runStorage.saveRun(run)
+                runStorage.clearDraft()
+            }
         }
     }
 
@@ -282,7 +184,7 @@ fun TrailRunScreen(
             .padding(8.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        if (!hasLocationPermission && mode == RecordMode.Gps) {
+        if (!hasLocationPermission && selectedMode == RecordMode.Gps) {
             SectionCard(title = "Record", subtitle = "Checks the calculated jump against a real run") {
                 Text(
                     "Location permission is required to record with GPS. You can still use " +
@@ -303,8 +205,8 @@ fun TrailRunScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 RecordMode.entries.forEach { option ->
                     FilterChip(
-                        selected = mode == option,
-                        onClick = { if (!isRecording) mode = option },
+                        selected = selectedMode == option,
+                        onClick = { if (!isRecording) selectedMode = option },
                         label = { Text(option.label) },
                         enabled = !isRecording
                     )
@@ -322,7 +224,7 @@ fun TrailRunScreen(
                 PrimaryActionButton(
                     text = "Start recording",
                     onClick = { startRecording() },
-                    enabled = mode == RecordMode.NoGps || hasLocationPermission,
+                    enabled = selectedMode == RecordMode.NoGps || hasLocationPermission,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -348,7 +250,7 @@ fun TrailRunScreen(
 
             RecordingStatus(
                 isRecording = isRecording,
-                mode = mode,
+                mode = selectedMode,
                 elapsedSec = elapsedSec,
                 sampleCount = samples.size,
                 lastFix = lastFix,
@@ -380,7 +282,7 @@ fun TrailRunScreen(
         // the estimate - still above the fold on most phones.
         RunResultsSection(
             samples = samples,
-            mode = mode,
+            mode = recordedMode,
             detectedJump = detectedJump,
             predictedDistanceM = predictedJump?.distanceM,
             showComparison = !isRecording,

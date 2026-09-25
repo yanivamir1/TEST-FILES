@@ -99,6 +99,13 @@ private fun AppRoot(
         }
     }
 
+    // A leftover draft means the app was killed mid-recording last time (battery manager,
+    // low memory, phone pulled out of a pocket and force-closed) - file whatever it managed
+    // to save into History rather than silently dropping it.
+    LaunchedEffect(Unit) {
+        runStorage.recoverDraft()?.let { runStorage.saveRun(it) }
+    }
+
     Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
         LiveSensorBar(
             liveSensors = liveSensors,

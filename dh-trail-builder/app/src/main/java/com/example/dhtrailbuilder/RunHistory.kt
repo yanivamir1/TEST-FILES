@@ -40,6 +40,11 @@ data class RunSummary(
 class RunStorage(context: Context) {
     private val dir = File(context.filesDir, "runs").apply { mkdirs() }
 
+    // A separate folder (not *.json directly under dir) so the in-progress draft never shows
+    // up as a phantom entry in listRuns().
+    private val draftDir = File(context.filesDir, "draft").apply { mkdirs() }
+    private val draftFile = File(draftDir, "current.json")
+
     suspend fun saveRun(run: SavedRun) = withContext(Dispatchers.IO) {
         File(dir, "${run.id}.json").writeText(run.toJson().toString())
     }
@@ -59,6 +64,33 @@ class RunStorage(context: Context) {
     suspend fun deleteRun(id: String) = withContext(Dispatchers.IO) {
         File(dir, "$id.json").delete()
         Unit
+    }
+
+    /**
+     * Called every few seconds while a run is being recorded, so that if the phone (or an
+     * over-eager battery manager) kills the app outright, at most a few seconds of the ride
+     * are lost rather than all of it - see [recoverDraft].
+     */
+    suspend fun saveDraft(run: SavedRun) = withContext(Dispatchers.IO) {
+        runCatching { draftFile.writeText(run.toJson().toString()) }
+        Unit
+    }
+
+    suspend fun clearDraft() = withContext(Dispatchers.IO) {
+        draftFile.delete()
+        Unit
+    }
+
+    /**
+     * A leftover draft means the app never got to a clean stop last time (killed, crashed,
+     * battery pulled). Called once on launch: if one exists, it is filed into History as-is
+     * and the draft slot is cleared, so nothing is silently lost.
+     */
+    suspend fun recoverDraft(): SavedRun? = withContext(Dispatchers.IO) {
+        if (!draftFile.exists()) return@withContext null
+        val recovered = runCatching { draftFile.readText().toSavedRun() }.getOrNull()
+        draftFile.delete()
+        recovered?.takeIf { it.samples.size >= 2 }
     }
 }
 
