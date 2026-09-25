@@ -367,8 +367,11 @@ fun RunResultsSection(
                 value = scrubIndex.toFloat(),
                 onValueChange = { userScrubIndex = it.roundToInt() },
                 valueRange = 0f..samples.lastIndex.toFloat().coerceAtLeast(0f),
-                steps = (samples.size - 2).coerceAtLeast(0),
-                modifier = Modifier.height(28.dp)
+                steps = (samples.size - 2).coerceAtLeast(0)
+                // No explicit height here: Material3's Slider has its own ~48dp thumb/track
+                // sizing, and squeezing the container smaller than that (a 28dp height, from an
+                // earlier "shrink every row" pass) clipped the thumb's hit area, so it visually
+                // stopped tracking the finger - the "the slider doesn't move with the point" bug.
             )
             ScrubReadout(sample = scrubSample, useDistance = useDistance)
             if (peakSample != null) {
