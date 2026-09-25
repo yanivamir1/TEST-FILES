@@ -412,10 +412,32 @@ private fun SlideToStopControl(onConfirm: () -> Unit, modifier: Modifier = Modif
     val handleSizePx = with(density) { handleSizeDp.toPx() }
     var trackWidthPx by remember { mutableStateOf(0f) }
     val maxOffsetPx = (trackWidthPx - handleSizePx).coerceAtLeast(1f)
-    val offsetPx = remember { Animatable(0f) }
-    val scope = rememberCoroutineScope()
+
+    // The handle's position while a finger is actively on it: plain, synchronous state. The
+    // previous version routed every drag delta through `scope.launch { animatable.snapTo(...) }`
+    // - a fresh coroutine per pixel of movement - so onDragStopped could run and read the
+    // offset *before* the last few deltas had actually been applied, see the handle short of
+    // the threshold even though the finger had reached the end, and never call onConfirm() at
+    // all. That silently broke the only way to stop a recording. Reading a plain var here has
+    // no such lag.
+    var offsetPx by remember { mutableStateOf(0f) }
     var confirmed by remember { mutableStateOf(false) }
-    val progress = (offsetPx.value / maxOffsetPx).coerceIn(0f, 1f)
+
+    // Only used to animate the handle to its resting position (back to the start, or on through
+    // to the end on confirm) once the finger lifts - purely cosmetic, decoupled from the
+    // confirm decision above so it can never delay or drop it.
+    val settle = remember { Animatable(0f) }
+    var settleTarget by remember { mutableStateOf<Float?>(null) }
+    LaunchedEffect(settleTarget) {
+        val target = settleTarget ?: return@LaunchedEffect
+        settle.snapTo(offsetPx)
+        settle.animateTo(target)
+        offsetPx = target
+        settleTarget = null
+    }
+
+    val displayOffset = settleTarget?.let { settle.value } ?: offsetPx
+    val progress = (displayOffset / maxOffsetPx).coerceIn(0f, 1f)
 
     Box(
         modifier = modifier
@@ -435,26 +457,23 @@ private fun SlideToStopControl(onConfirm: () -> Unit, modifier: Modifier = Modif
         Box(
             modifier = Modifier
                 .padding(4.dp)
-                .offset { IntOffset(offsetPx.value.roundToInt(), 0) }
+                .offset { IntOffset(displayOffset.roundToInt(), 0) }
                 .size(handleSizeDp)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.error)
                 .draggable(
                     orientation = Orientation.Horizontal,
+                    enabled = !confirmed,
                     state = rememberDraggableState { delta ->
-                        if (confirmed) return@rememberDraggableState
-                        val next = (offsetPx.value + delta).coerceIn(0f, maxOffsetPx)
-                        scope.launch { offsetPx.snapTo(next) }
+                        offsetPx = (offsetPx + delta).coerceIn(0f, maxOffsetPx)
                     },
                     onDragStopped = {
-                        if (!confirmed) {
-                            if (offsetPx.value >= maxOffsetPx * 0.85f) {
-                                confirmed = true
-                                offsetPx.animateTo(maxOffsetPx)
-                                onConfirm()
-                            } else {
-                                offsetPx.animateTo(0f)
-                            }
+                        if (offsetPx >= maxOffsetPx * 0.85f) {
+                            confirmed = true
+                            settleTarget = maxOffsetPx
+                            onConfirm()
+                        } else {
+                            settleTarget = 0f
                         }
                     }
                 ),
