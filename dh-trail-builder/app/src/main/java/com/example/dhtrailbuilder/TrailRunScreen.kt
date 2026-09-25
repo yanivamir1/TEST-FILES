@@ -5,17 +5,27 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -23,6 +33,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.animation.core.Animatable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -33,12 +44,17 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import java.util.Locale
 import java.util.UUID
@@ -69,7 +85,8 @@ fun TrailRunScreen(
     onRequestPermission: () -> Unit,
     modifier: Modifier = Modifier,
     predictedJump: JumpScreenResult? = null,
-    rampAngleDeg: Float? = null
+    rampAngleDeg: Float? = null,
+    onRecordingChanged: (Boolean) -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -131,6 +148,14 @@ fun TrailRunScreen(
             elapsedSec += 1
         }
     }
+
+    // Lets the caller lock tab switching while recording - a stray touch through fabric
+    // should not be able to navigate away and tear down the recording.
+    LaunchedEffect(isRecording) { onRecordingChanged(isRecording) }
+
+    // The hardware/gesture back action is another way a pocket touch could end the screen -
+    // swallow it while recording instead of letting it navigate away.
+    BackHandler(enabled = isRecording) { }
 
     fun startRecording() {
         samples.clear()
@@ -286,12 +311,21 @@ fun TrailRunScreen(
                 }
             }
 
-            PrimaryActionButton(
-                text = if (isRecording) "Stop recording" else "Start recording",
-                onClick = { if (isRecording) stopRecording() else startRecording() },
-                enabled = mode == RecordMode.NoGps || hasLocationPermission,
-                modifier = Modifier.fillMaxWidth()
-            )
+            if (isRecording) {
+                // A tap can happen by accident through fabric in a pocket - stopping needs a
+                // deliberate full-width slide instead.
+                SlideToStopControl(
+                    onConfirm = { stopRecording() },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            } else {
+                PrimaryActionButton(
+                    text = "Start recording",
+                    onClick = { startRecording() },
+                    enabled = mode == RecordMode.NoGps || hasLocationPermission,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -454,6 +488,75 @@ fun RunResultsSection(
                 detectedJump = detectedJump,
                 predictedDistanceM = predictedDistanceM,
                 useDistance = useDistance
+            )
+        }
+    }
+}
+
+/**
+ * "Slide to stop": the only way to end a recording, so a tap through fabric in a pocket can't
+ * do it by accident. Drag the handle to the end of the track; letting go anywhere short of that
+ * springs it back to the start with nothing triggered.
+ */
+@Composable
+private fun SlideToStopControl(onConfirm: () -> Unit, modifier: Modifier = Modifier) {
+    val handleSizeDp = 48.dp
+    val density = LocalDensity.current
+    val handleSizePx = with(density) { handleSizeDp.toPx() }
+    var trackWidthPx by remember { mutableStateOf(0f) }
+    val maxOffsetPx = (trackWidthPx - handleSizePx).coerceAtLeast(1f)
+    val offsetPx = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    var confirmed by remember { mutableStateOf(false) }
+    val progress = (offsetPx.value / maxOffsetPx).coerceIn(0f, 1f)
+
+    Box(
+        modifier = modifier
+            .height(56.dp)
+            .clip(RoundedCornerShape(28.dp))
+            .background(MaterialTheme.colorScheme.errorContainer)
+            .onSizeChanged { trackWidthPx = it.width.toFloat() },
+        contentAlignment = Alignment.CenterStart
+    ) {
+        Text(
+            text = "Slide to stop →",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 1f - progress),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Box(
+            modifier = Modifier
+                .padding(4.dp)
+                .offset { IntOffset(offsetPx.value.roundToInt(), 0) }
+                .size(handleSizeDp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.error)
+                .draggable(
+                    orientation = Orientation.Horizontal,
+                    state = rememberDraggableState { delta ->
+                        if (confirmed) return@rememberDraggableState
+                        val next = (offsetPx.value + delta).coerceIn(0f, maxOffsetPx)
+                        scope.launch { offsetPx.snapTo(next) }
+                    },
+                    onDragStopped = {
+                        if (!confirmed) {
+                            if (offsetPx.value >= maxOffsetPx * 0.85f) {
+                                confirmed = true
+                                offsetPx.animateTo(maxOffsetPx)
+                                onConfirm()
+                            } else {
+                                offsetPx.animateTo(0f)
+                            }
+                        }
+                    }
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "■",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onError
             )
         }
     }

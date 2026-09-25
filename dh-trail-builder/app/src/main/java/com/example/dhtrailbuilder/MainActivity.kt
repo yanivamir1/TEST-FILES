@@ -74,6 +74,9 @@ private fun AppRoot(
     val liveSensors = rememberLiveSensors(sensorRepository, angleRepository)
     val runStorage = remember { RunStorage(context.applicationContext) }
     var currentScreen by remember { mutableStateOf(Screen.Jump) }
+    // While a run is recording, tab switching is locked - a stray touch through fabric in a
+    // pocket must not be able to navigate away from Run-up and tear down the recording.
+    var isRideRecording by remember { mutableStateOf(false) }
     var lastJumpResult by remember { mutableStateOf<JumpScreenResult?>(null) }
     var landingAltitudeM by remember { mutableStateOf<Float?>(null) }
     var rampAngleDeg by remember { mutableStateOf<Float?>(null) }
@@ -114,7 +117,8 @@ private fun AppRoot(
             Screen.entries.forEach { screen ->
                 Tab(
                     selected = screen == currentScreen,
-                    onClick = { currentScreen = screen },
+                    onClick = { if (!isRideRecording) currentScreen = screen },
+                    enabled = !isRideRecording || screen == currentScreen,
                     text = { Text(screen.label, style = MaterialTheme.typography.labelLarge) },
                     selectedContentColor = MaterialTheme.colorScheme.primary,
                     unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -144,7 +148,8 @@ private fun AppRoot(
                     permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
                 },
                 predictedJump = lastJumpResult,
-                rampAngleDeg = rampAngleDeg
+                rampAngleDeg = rampAngleDeg,
+                onRecordingChanged = { isRideRecording = it }
             )
             Screen.History -> RunHistoryScreen(runStorage = runStorage)
         }
