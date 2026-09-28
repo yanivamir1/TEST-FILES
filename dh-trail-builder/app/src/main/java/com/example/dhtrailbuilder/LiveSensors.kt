@@ -1,12 +1,15 @@
 package com.example.dhtrailbuilder
 
+import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -53,6 +56,13 @@ class LiveSensorState {
         seaLevelPressureHpa = Physics.STANDARD_SEA_LEVEL_HPA
         isCalibrated = false
     }
+
+    /** Restores a calibration saved from a previous session - see [rememberLiveSensors]. Unlike
+     * [calibrateTo], this doesn't need a live pressure reading: it sets the reference directly. */
+    internal fun restoreCalibration(seaLevelHpa: Float, calibrated: Boolean) {
+        seaLevelPressureHpa = seaLevelHpa
+        isCalibrated = calibrated
+    }
 }
 
 @Composable
@@ -60,8 +70,21 @@ fun rememberLiveSensors(
     sensorRepository: SensorRepository,
     angleRepository: AngleRepository
 ): LiveSensorState {
-    val state = remember { LiveSensorState() }
+    val context = LocalContext.current
+    val state = remember {
+        LiveSensorState().apply {
+            val (seaLevelHpa, calibrated) = loadCalibration(context)
+            restoreCalibration(seaLevelHpa, calibrated)
+        }
+    }
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    // Calibrating used to reset itself every time the app was closed, so it needed redoing on
+    // every launch - now it's remembered like the dark-mode preference, and just kept in sync
+    // here whenever it changes (from the calibration dialog, or a manual reset).
+    LaunchedEffect(state.seaLevelPressureHpa, state.isCalibrated) {
+        saveCalibration(context, state.seaLevelPressureHpa, state.isCalibrated)
+    }
 
     DisposableEffect(lifecycleOwner) {
         var pressureJob: Job? = null
@@ -111,4 +134,23 @@ fun rememberLiveSensors(
     }
 
     return state
+}
+
+private const val CALIBRATION_PREFS_NAME = "dh_trail_builder_prefs"
+private const val KEY_SEA_LEVEL_HPA = "sea_level_hpa"
+private const val KEY_IS_CALIBRATED = "is_calibrated"
+
+private fun loadCalibration(context: Context): Pair<Float, Boolean> {
+    val prefs = context.getSharedPreferences(CALIBRATION_PREFS_NAME, Context.MODE_PRIVATE)
+    val seaLevelHpa = prefs.getFloat(KEY_SEA_LEVEL_HPA, Physics.STANDARD_SEA_LEVEL_HPA)
+    val calibrated = prefs.getBoolean(KEY_IS_CALIBRATED, false)
+    return seaLevelHpa to calibrated
+}
+
+private fun saveCalibration(context: Context, seaLevelHpa: Float, calibrated: Boolean) {
+    context.getSharedPreferences(CALIBRATION_PREFS_NAME, Context.MODE_PRIVATE)
+        .edit()
+        .putFloat(KEY_SEA_LEVEL_HPA, seaLevelHpa)
+        .putBoolean(KEY_IS_CALIBRATED, calibrated)
+        .apply()
 }
