@@ -90,3 +90,29 @@ versionName = "v2"     // always "v" + versionCode
 The version is shown in the app's top bar and the CI artifact is named after it
 (e.g. `dh-trail-builder-v2`), so the user can tell at a glance which build is installed.
 Always mention the new version number when reporting a build to the user.
+
+## Android apps: commit the built APK back to the repo for direct delivery
+
+GitHub Actions artifact downloads always redirect to Azure blob storage
+(`*.blob.core.windows.net`), which this environment cannot reach, and there is no local
+Android toolchain here to build the APK directly. So after `assembleDebug` succeeds, the
+workflow also commits the APK into the repo at `releases/<app-name>-latest.apk` and pushes
+it back to the same branch - that file is reachable with a plain `git pull`, so Claude can
+hand it to the user directly (as a chat attachment) instead of only linking the Actions run.
+
+Keep this working for every app module's workflow:
+- `permissions: contents: write` at the workflow (or job) level.
+- A step after the build that copies the APK to `releases/<app-name>-latest.apk`, commits
+  it (skip the commit if nothing changed - `git diff --cached --quiet && exit 0`), and
+  pushes. See `.github/workflows/build-dh-trail-builder-apk.yml` for the exact shape.
+- The commit's own message must carry the real, bracketed `[skip ci]` marker so it doesn't
+  loop back into another build. GitHub matches that marker as a plain substring anywhere in
+  a commit message, including inside prose merely *describing* this step (e.g. a commit body
+  explaining the workflow) - so when writing *about* this convention in a commit message,
+  spell it without the brackets. Only the workflow's own generated commit should ever contain
+  the real bracketed marker.
+- Don't remove `contents: write`, the commit-back step, or add `releases/*.apk` to
+  `.gitignore`.
+
+After pushing a new version, pull the branch and attach `releases/<app-name>-latest.apk`
+directly in chat, in addition to (not instead of) linking the Actions run.
