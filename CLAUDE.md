@@ -96,13 +96,14 @@ Always mention the new version number when reporting a build to the user.
 GitHub Actions artifact downloads always redirect to Azure blob storage
 (`*.blob.core.windows.net`), which this environment cannot reach, and there is no local
 Android toolchain here to build the APK directly. So after `assembleDebug` succeeds, the
-workflow also commits the APK into the repo at `releases/<app-name>-latest.apk` and pushes
+workflow also commits the APK into the repo at `releases/<app-name>-<version>.apk` (for example
+`releases/dh-trail-builder-v11.apk`) and pushes
 it back to the same branch - that file is reachable with a plain `git pull`, so Claude can
 hand it to the user directly (as a chat attachment) instead of only linking the Actions run.
 
 Keep this working for every app module's workflow:
 - `permissions: contents: write` at the workflow (or job) level.
-- A step after the build that copies the APK to `releases/<app-name>-latest.apk`, commits
+- A step after the build that copies the APK to `releases/<app-name>-<version>.apk`, commits
   it (skip the commit if nothing changed - `git diff --cached --quiet && exit 0`), and
   pushes. See `.github/workflows/build-dh-trail-builder-apk.yml` for the exact shape.
 - The commit's own message must carry the real, bracketed `[skip ci]` marker so it doesn't
@@ -114,5 +115,5 @@ Keep this working for every app module's workflow:
 - Don't remove `contents: write`, the commit-back step, or add `releases/*.apk` to
   `.gitignore`.
 
-After pushing a new version, pull the branch and attach `releases/<app-name>-latest.apk`
+After pushing a new version, pull the branch and attach `releases/<app-name>-<version>.apk`
 directly in chat, in addition to (not instead of) linking the Actions run.
