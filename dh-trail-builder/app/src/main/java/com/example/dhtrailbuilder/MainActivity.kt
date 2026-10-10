@@ -43,6 +43,7 @@ class MainActivity : ComponentActivity() {
         sensorRepository = SensorRepository(applicationContext)
         locationRepository = LocationRepository(applicationContext)
         angleRepository = AngleRepository(applicationContext)
+        initOsmdroid(applicationContext)
 
         setContent {
             var isDark by remember { mutableStateOf(loadDarkModePreference(applicationContext)) }

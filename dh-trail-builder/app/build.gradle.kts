@@ -11,8 +11,8 @@ android {
         applicationId = "com.example.dhtrailbuilder"
         minSdk = 24
         targetSdk = 34
-        versionCode = 10
-        versionName = "v10"
+        versionCode = 11
+        versionName = "v11"
     }
 
     // CI runners are ephemeral, so the SDK's auto-generated ~/.android/debug.keystore is
@@ -64,4 +64,8 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.ui:ui-tooling-preview")
+    // The route-on-a-real-map view in Run-up/History (RouteMapView.kt). No API key, no Google
+    // Cloud account - tiles come straight from OpenTopoMap over plain HTTP(S), which is what
+    // this needs for a sideloaded personal app with nobody to set up billing for a Maps key.
+    implementation("org.osmdroid:osmdroid-android:6.1.18")
 }

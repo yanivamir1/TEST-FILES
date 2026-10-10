@@ -123,6 +123,8 @@ private fun SavedRun.toJson(): JSONObject = JSONObject().apply {
                         put("a", s.altitudeM.toDouble())
                         put("s", s.speedKmh?.toDouble() ?: JSONObject.NULL)
                         put("d", s.cumulativeDistanceM?.toDouble() ?: JSONObject.NULL)
+                        put("lat", s.latitude ?: JSONObject.NULL)
+                        put("lon", s.longitude ?: JSONObject.NULL)
                     }
                 )
             }
@@ -140,7 +142,9 @@ private fun String.toSavedRun(): SavedRun {
             elapsedSec = s.getDouble("e").toFloat(),
             altitudeM = s.getDouble("a").toFloat(),
             speedKmh = if (s.isNull("s")) null else s.getDouble("s").toFloat(),
-            cumulativeDistanceM = if (s.isNull("d")) null else s.getDouble("d").toFloat()
+            cumulativeDistanceM = if (s.isNull("d")) null else s.getDouble("d").toFloat(),
+            latitude = if (s.isNull("lat")) null else s.getDouble("lat"),
+            longitude = if (s.isNull("lon")) null else s.getDouble("lon")
         )
     }
     val takeoff = if (json.isNull("takeoffAtMs")) null else json.getLong("takeoffAtMs")

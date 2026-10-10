@@ -129,7 +129,9 @@ object RecordingSession {
                             elapsedSec = (now - startedAt) / 1000f,
                             altitudeM = altitude,
                             speedKmh = speed,
-                            cumulativeDistanceM = cumulativeDistance
+                            cumulativeDistanceM = cumulativeDistance,
+                            latitude = lat,
+                            longitude = lon
                         )
                     )
                 }

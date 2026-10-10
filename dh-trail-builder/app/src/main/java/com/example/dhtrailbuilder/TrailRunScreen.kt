@@ -66,7 +66,11 @@ data class RunSample(
     val elapsedSec: Float,
     val altitudeM: Float,
     val speedKmh: Float? = null,
-    val cumulativeDistanceM: Float? = null
+    val cumulativeDistanceM: Float? = null,
+    // The raw fix, kept only so the route can be drawn on a real map (RouteMapView) - absent
+    // in NoGps mode.
+    val latitude: Double? = null,
+    val longitude: Double? = null
 )
 
 @Composable
@@ -339,6 +343,12 @@ fun RunResultsSection(
     val peakSample = if (useDistance) samples.maxByOrNull { it.speedKmh ?: 0f } else null
     val brakeSample = if (useDistance) brakingPoint(samples) else null
     fun xOf(sample: RunSample) = if (useDistance) sample.cumulativeDistanceM ?: 0f else sample.elapsedSec
+    // Absent on NoGps runs, and on runs saved before the map existed.
+    val routePoints = samples.mapNotNull { s ->
+        val lat = s.latitude
+        val lon = s.longitude
+        if (lat != null && lon != null) lat to lon else null
+    }
 
     var userScrubIndex by remember { mutableStateOf<Int?>(null) }
     val scrubIndex = (userScrubIndex ?: samples.lastIndex).coerceIn(0, samples.lastIndex)
@@ -376,6 +386,12 @@ fun RunResultsSection(
             ScrubReadout(sample = scrubSample, useDistance = useDistance)
             if (peakSample != null) {
                 MarkerLegend(showBraking = brakeSample != null)
+            }
+        }
+
+        if (routePoints.size >= 2) {
+            SectionCard(title = "Route", subtitle = "OpenTopoMap - start and end marked") {
+                RouteMapView(points = routePoints)
             }
         }
 
